@@ -16,14 +16,14 @@ The app is early-stage and in active development. macOS only for now.
 
 Collaborator is a native desktop app built with:
 
-- **Electron 40** — desktop shell with multi-window architecture
+- **Electron 40** — desktop shell with multi-webview architecture
 - **React 19** — UI framework
 - **Tailwind CSS 4** — styling
 - **electron-vite** — build tooling with hot reload
 - **xterm.js** — terminal emulation, backed by tmux sessions for persistence
 - **Monaco Editor** — code editing with syntax highlighting
 - **BlockNote / TipTap** — rich text markdown editing
-- **D3** — canvas rendering (infinite pan-and-zoom surface)
+- **D3** — force-directed graph visualization
 - **sharp** — image processing
 - **KaTeX** — math rendering in markdown
 
@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/collaborator-ai/collab-public/main/
 
 ### Application overview
 
-Collaborator is a single-window application for macOS (arm64). It operates entirely on local files with no cloud services or accounts.
+Collaborator is a single-window application for macOS (arm64). It operates primarily on local files with no accounts required. Anonymous, non-identifying usage analytics are collected via PostHog.
 
 The window is divided into two regions:
 
@@ -122,7 +122,7 @@ The canvas is an infinite pan-and-zoom surface that fills the main area. It uses
 
 * Minor grid dots at regular intervals
 
-* Major grid lines at every 4th interval
+* Major grid dots at every 4th interval
 
 * All tile positions and sizes snap to the grid
 
@@ -162,7 +162,7 @@ Terminals are the primary interface for running AI agents. Each terminal tile ma
 
 #### Note
 
-A rich markdown editor. Created by dragging a markdown file (`.md`, `.mdx`, `.markdown`, `.txt`) from the navigator onto the canvas. Supports inline editing with live rendering.
+A rich markdown editor. Created by dragging a `.md` file from the navigator onto the canvas. Supports inline editing with live rendering.
 
 #### Code
 
@@ -218,7 +218,7 @@ All state is stored locally in `~/.collaborator/`.
 
 Canvas state is saved 500ms after each change (debounced) and immediately when tiles are created or closed.
 
-#### Workspace config (`collaborator.json`)
+#### App config (`config.json`)
 
 ```json
 {
@@ -230,7 +230,8 @@ Canvas state is saved 500ms after each change (debounced) and immediately when t
     "width": 1440,
     "height": 900,
     "isMaximized": false
-  }
+  },
+  "ui": {}
 }
 ```
 
