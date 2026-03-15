@@ -10,7 +10,22 @@ Collaborator is an end-to-end environment for agentic development. Terminals, co
 
 The app is early-stage and in active development. macOS only for now.
 
-**[Download the latest release](https://github.com/collaborator-ai/collab-public/releases/latest)**
+## Install
+
+**[Download the latest release](https://github.com/collaborator-ai/collab-public/releases/latest)** (macOS, Apple Silicon)
+
+Or install from the command line:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/collaborator-ai/collab-public/main/install.sh | bash
+```
+
+## Quickstart
+
+1. Open Collaborator
+2. Add a workspace — click the workspace dropdown in the navigator and choose "Add workspace", or press Cmd+Shift+O, then select a local folder
+3. Double-click the canvas to create a terminal, and start an agent
+4. Drag files from the navigator onto the canvas to open them as tiles alongside your running agents
 
 ***
 
