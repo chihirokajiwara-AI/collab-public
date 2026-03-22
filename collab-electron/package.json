@@ -47,10 +47,6 @@
 		"afterAllArtifactBuild": "scripts/fix-artifacts.cjs",
 		"extraResources": [
 			{
-				"from": "mcp/dist/CollaboratorMcpServerMac",
-				"to": "MacOS/CollaboratorMcpServerMac"
-			},
-			{
 				"from": "vendor/tmux/tmux",
 				"to": "tmux"
 			},
