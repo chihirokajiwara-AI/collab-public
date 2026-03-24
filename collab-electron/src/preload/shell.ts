@@ -35,6 +35,14 @@ ipcRenderer.on("shell:forward", (_event, target, channel, ...args) => {
   pendingForwards.push([target, channel, ...args]);
 });
 
+// Buffer canvas:rpc-request messages that arrive before renderer
+// registers onCanvasRpcRequest (same cold-launch race as above).
+type RpcRequest = { requestId: string; method: string; params: Record<string, unknown> };
+const pendingRpcRequests: RpcRequest[] = [];
+ipcRenderer.on("canvas:rpc-request", (_event, request: RpcRequest) => {
+  pendingRpcRequests.push(request);
+});
+
 contextBridge.exposeInMainWorld("shellApi", {
   getPlatform: (): NodeJS.Platform => process.platform,
 
@@ -180,6 +188,14 @@ contextBridge.exposeInMainWorld("shellApi", {
   onCanvasRpcRequest: (
     cb: (request: { requestId: string; method: string; params: Record<string, unknown> }) => void,
   ) => {
+    // Replay any RPC requests that arrived before this callback registered
+    for (const request of pendingRpcRequests) {
+      cb(request);
+    }
+    pendingRpcRequests.length = 0;
+
+    // Replace the buffer listener with the real handler
+    ipcRenderer.removeAllListeners("canvas:rpc-request");
     const handler = (
       _event: unknown,
       request: { requestId: string; method: string; params: Record<string, unknown> },
