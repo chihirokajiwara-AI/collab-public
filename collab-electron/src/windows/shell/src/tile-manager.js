@@ -12,6 +12,15 @@ import { attachDrag, attachResize } from "./tile-interactions.js";
 import { findAutoPlacement } from "./canvas-rpc.js";
 
 /**
+ * Returns true if the tile's screen-space rectangle overlaps the viewport.
+ */
+function isInViewport(tile, panX, panY, zoom, canvasW, canvasH) {
+	const sx = tile.x * zoom + panX, sy = tile.y * zoom + panY;
+	const sw = tile.width * zoom, sh = tile.height * zoom;
+	return sx + sw > 0 && sx < canvasW && sy + sh > 0 && sy < canvasH;
+}
+
+/**
  * Tile lifecycle manager: creation, deletion, persistence, webview
  * spawning, focus, selection visuals, and canvas save/restore.
  */
@@ -641,7 +650,22 @@ export function createTileManager({
 
 	// -- Canvas state restore --
 
+	function spawnTileContent(tile) {
+		if (tile.type === "term") {
+			spawnTerminalWebview(tile);
+		} else if (tile.type === "graph" && tile.folderPath) {
+			spawnGraphWebview(tile);
+		} else if (tile.type === "browser") {
+			spawnBrowserWebview(tile);
+		} else if (tile.filePath) {
+			// File tiles inline-create their content; nothing extra needed.
+		}
+	}
+
 	function restoreCanvasState(savedTiles) {
+		const canvasW = tileLayer.offsetWidth;
+		const canvasH = tileLayer.offsetHeight;
+
 		for (const saved of savedTiles) {
 			let cx = saved.x;
 			let cy = saved.y;
@@ -655,6 +679,7 @@ export function createTileManager({
 			}
 
 			if (saved.type === "term") {
+				// Terminal tiles always spawn eagerly (PTY session bindings).
 				const tile = createCanvasTile(
 					"term", cx, cy, {
 						id: saved.id,
@@ -676,7 +701,15 @@ export function createTileManager({
 						workspacePath: saved.workspacePath,
 					},
 				);
-				spawnGraphWebview(tile);
+				if (isInViewport(tile, viewportState.panX, viewportState.panY, viewportState.zoom, canvasW, canvasH)) {
+					spawnGraphWebview(tile);
+				} else {
+					tile.deferred = true;
+					const placeholder = document.createElement("div");
+					placeholder.className = "tile-deferred-placeholder";
+					placeholder.textContent = getTileLabel(tile);
+					tileDOMs.get(tile.id)?.contentArea.appendChild(placeholder);
+				}
 			} else if (saved.type === "browser") {
 				const tile = createCanvasTile(
 					"browser", cx, cy, {
@@ -687,13 +720,102 @@ export function createTileManager({
 						url: saved.url,
 					},
 				);
-				spawnBrowserWebview(tile);
+				if (isInViewport(tile, viewportState.panX, viewportState.panY, viewportState.zoom, canvasW, canvasH)) {
+					spawnBrowserWebview(tile);
+				} else {
+					tile.deferred = true;
+					const placeholder = document.createElement("div");
+					placeholder.className = "tile-deferred-placeholder";
+					placeholder.textContent = getTileLabel(tile);
+					tileDOMs.get(tile.id)?.contentArea.appendChild(placeholder);
+				}
 			} else if (saved.filePath) {
-				createFileTile(
-					saved.type, cx, cy, saved.filePath,
-				);
+				const tileObj = {
+					type: saved.type,
+					x: saved.x, y: saved.y,
+					width: saved.width, height: saved.height,
+					filePath: saved.filePath,
+				};
+				if (isInViewport(tileObj, viewportState.panX, viewportState.panY, viewportState.zoom, canvasW, canvasH)) {
+					createFileTile(saved.type, saved.x, saved.y, saved.filePath);
+				} else {
+					const tile = createCanvasTile(
+						saved.type, saved.x, saved.y, {
+							id: saved.id,
+							width: saved.width,
+							height: saved.height,
+							zIndex: saved.zIndex,
+							filePath: saved.filePath,
+						},
+					);
+					tile.deferred = true;
+					const placeholder = document.createElement("div");
+					placeholder.className = "tile-deferred-placeholder";
+					placeholder.textContent = getTileLabel(tile);
+					tileDOMs.get(tile.id)?.contentArea.appendChild(placeholder);
+				}
 			}
 		}
+	}
+
+	// -- Deferred tile spawning --
+
+	function checkDeferredTiles() {
+		const canvasW = tileLayer.offsetWidth;
+		const canvasH = tileLayer.offsetHeight;
+
+		for (const tile of tiles) {
+			if (!tile.deferred) continue;
+			if (!isInViewport(tile, viewportState.panX, viewportState.panY, viewportState.zoom, canvasW, canvasH)) continue;
+
+			tile.deferred = false;
+			const dom = tileDOMs.get(tile.id);
+			if (!dom) continue;
+
+			// Remove placeholder(s).
+			for (const el of dom.contentArea.querySelectorAll(".tile-deferred-placeholder")) {
+				el.remove();
+			}
+
+			// Spawn content.
+			if (tile.type === "graph" && tile.folderPath) {
+				spawnGraphWebview(tile);
+			} else if (tile.type === "browser") {
+				spawnBrowserWebview(tile);
+			} else if (tile.filePath && tile.type !== "image") {
+				// Recreate file-viewer webview inline (matches createFileTile logic).
+				const wv = document.createElement("webview");
+				const viewerConfig = configs.viewer;
+				const mode = tile.type === "note" ? "note" : "code";
+				wv.setAttribute(
+					"src",
+					`${viewerConfig.src}?tilePath=${encodeURIComponent(tile.filePath)}&tileMode=${mode}`,
+				);
+				wv.setAttribute("preload", viewerConfig.preload);
+				wv.setAttribute("webpreferences", "contextIsolation=yes, sandbox=yes");
+				wv.style.width = "100%";
+				wv.style.height = "100%";
+				wv.style.border = "none";
+				dom.contentArea.appendChild(wv);
+				dom.webview = wv;
+			} else if (tile.filePath && tile.type === "image") {
+				// Recreate image viewer inline.
+				const imgContainer = document.createElement("div");
+				imgContainer.style.cssText = "overflow:hidden;width:100%;height:100%;cursor:grab;";
+				const img = document.createElement("img");
+				img.src = `collab-file://${tile.filePath}`;
+				img.style.cssText = "width:100%;height:100%;object-fit:contain;transform-origin:center;pointer-events:none;";
+				img.draggable = false;
+				imgContainer.appendChild(img);
+				dom.contentArea.appendChild(imgContainer);
+			}
+		}
+	}
+
+	let _deferredCheckTimer = null;
+	function checkDeferredTilesDebounced() {
+		clearTimeout(_deferredCheckTimer);
+		_deferredCheckTimer = setTimeout(checkDeferredTiles, 200);
 	}
 
 	// -- Tile updates for external events --
@@ -766,6 +888,8 @@ export function createTileManager({
 		clearCanvas,
 		getCanvasStateForSave,
 		restoreCanvasState,
+		checkDeferredTiles,
+		checkDeferredTilesDebounced,
 		getTileDOMs: () => tileDOMs,
 		getFocusedTileId: () => focusedTileId,
 		setFocusedTileId: (id) => { focusedTileId = id; },

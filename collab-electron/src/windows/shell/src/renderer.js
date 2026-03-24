@@ -343,6 +343,10 @@ async function init() {
 		tileManager.saveCanvasDebounced();
 	});
 
+	viewport.setOnViewportChange(() => {
+		tileManager.checkDeferredTilesDebounced();
+	});
+
 	edgeIndicators.update();
 
 	// -- Surface focus management --
