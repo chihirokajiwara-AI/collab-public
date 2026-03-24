@@ -8,7 +8,7 @@ import { initDarkMode, applyCanvasOpacity } from "./dark-mode.js";
 import { createWebview, isFocusSearchShortcut } from "./webview-factory.js";
 import { createViewport } from "./canvas-viewport.js";
 import { createEdgeIndicators } from "./edge-indicators.js";
-import { createPanelManager } from "./panel-manager.js";
+import { createPanel } from "./panel-manager.js";
 import { createWorkspaceManager } from "./workspace-manager.js";
 import { createCanvasRpc } from "./canvas-rpc.js";
 import { createTileManager } from "./tile-manager.js";
@@ -43,11 +43,14 @@ async function init() {
 	const [
 		configs, workspaceData,
 		prefNavWidth, prefNavVisible,
+		prefTermWidth, prefTermVisible,
 	] = await Promise.all([
 		window.shellApi.getViewConfig(),
 		window.shellApi.workspaceList(),
 		window.shellApi.getPref("panel-width-nav"),
 		window.shellApi.getPref("panel-visible-nav"),
+		window.shellApi.getPref("panel-width-terminal"),
+		window.shellApi.getPref("panel-visible-terminal"),
 	]);
 
 	// DOM elements
@@ -78,6 +81,12 @@ async function init() {
 	const loadingStatusEl =
 		document.getElementById("loading-status");
 	const tileLayer = document.getElementById("tile-layer");
+	const panelTerminal =
+		document.getElementById("panel-terminal");
+	const terminalResizeHandle =
+		document.getElementById("terminal-resize");
+	const terminalToggle =
+		document.getElementById("terminal-toggle");
 
 	// -- State --
 
@@ -142,12 +151,21 @@ async function init() {
 		noteSurfaceFocus("settings");
 	});
 
+	const terminalListWebview = createWebview(
+		"terminal-list", configs.terminalList,
+		panelTerminal, handleDndMessage,
+	);
+
 	// -- Panel manager --
 
-	const panelManager = createPanelManager({
-		panelNav, panelViewer, navResizeHandle, navToggle,
+	const panelManager = createPanel("nav", {
+		panel: panelNav,
+		resizeHandle: navResizeHandle, toggle: navToggle,
+		label: "Navigator",
+		defaultWidth: 280,
+		direction: 1,
 		getAllWebviews,
-		onNavVisibilityChanged(visible) {
+		onVisibilityChanged(visible) {
 			if (visible) {
 				requestAnimationFrame(() => {
 					singletonViewer.send("nav-visibility", true);
@@ -158,6 +176,17 @@ async function init() {
 		},
 	});
 	panelManager.initPrefs(prefNavWidth, prefNavVisible);
+
+	const terminalPanel = createPanel("terminal", {
+		panel: panelTerminal,
+		resizeHandle: terminalResizeHandle,
+		toggle: terminalToggle,
+		label: "Terminals",
+		defaultWidth: 240,
+		direction: -1,
+		getAllWebviews,
+	});
+	terminalPanel.initPrefs(prefTermWidth, prefTermVisible);
 
 	// -- Workspace manager --
 
@@ -170,7 +199,7 @@ async function init() {
 			window.shellApi.workspaceSwitch(index);
 		},
 		onApplyNavVisibility() {
-			panelManager.applyNavVisibility();
+			panelManager.applyVisibility();
 		},
 	});
 
@@ -188,6 +217,26 @@ async function init() {
 		},
 		onNoteSurfaceFocus: noteSurfaceFocus,
 		onFocusSurface: focusSurface,
+		onTerminalSessionCreated(tile) {
+			terminalListWebview.send("terminal-list:add", {
+				sessionId: tile.ptySessionId,
+				shell: "zsh",
+				cwd: "~",
+				foreground: null,
+				tileId: tile.id,
+			});
+		},
+		onTerminalTileClosed(sessionId) {
+			terminalListWebview.send(
+				"terminal-list:remove", sessionId,
+			);
+		},
+		onTileFocused(tile) {
+			terminalListWebview.send(
+				"terminal-list:focus",
+				tile?.ptySessionId || null,
+			);
+		},
 	});
 
 	// -- Edge indicators --
@@ -259,7 +308,7 @@ async function init() {
 		}
 		if (
 			surface === "nav" &&
-			!(panelManager.isNavVisible() &&
+			!(panelManager.isVisible() &&
 				workspaceManager.getActiveWorkspace())
 		) {
 			surface = null;
@@ -267,7 +316,7 @@ async function init() {
 		if (surface === "viewer") return "viewer";
 		if (surface === "nav") return "nav";
 		if (
-			panelManager.isNavVisible() &&
+			panelManager.isVisible() &&
 			workspaceManager.getActiveWorkspace()
 		) return "nav";
 		if (isViewerVisible()) return "viewer";
@@ -338,6 +387,7 @@ async function init() {
 			all.push(wv);
 		}
 		all.push(singletonViewer);
+		all.push(terminalListWebview);
 		all.push(singletonWebviews.settings);
 		for (const [, dom] of tileManager.getTileDOMs()) {
 			if (dom.webview) {
@@ -648,7 +698,7 @@ async function init() {
 		if (action === "toggle-settings") {
 			window.shellApi.toggleSettings();
 		} else if (action === "toggle-nav") {
-			panelManager.toggleNav();
+			panelManager.toggle();
 		} else if (action === "close-tab") {
 			const idx = workspaceManager.getActiveIndex();
 			if (idx >= 0) {
@@ -656,13 +706,15 @@ async function init() {
 			}
 		} else if (action === "focus-search") {
 			if (workspaceManager.getActiveWorkspace()) {
-				if (!panelManager.isNavVisible()) {
-					panelManager.setNavVisible(true);
+				if (!panelManager.isVisible()) {
+					panelManager.setVisible(true);
 				}
 				focusActiveNavSearch();
 			}
 		} else if (action === "add-workspace") {
 			wsAddOption.click();
+		} else if (action === "toggle-terminal-list") {
+			terminalPanel.toggle();
 		} else if (action.startsWith("switch-tab-")) {
 			const idx = parseInt(action.slice(11), 10) - 1;
 			if (
@@ -819,21 +871,114 @@ async function init() {
 
 	window.shellApi.onCanvasRpcRequest(handleCanvasRpc);
 
+	// -- PTY lifecycle forwarding --
+
+	window.shellApi.onPtyExit((payload) => {
+		terminalListWebview.send("pty-exit", payload);
+
+		for (const [id] of tileManager.getTileDOMs()) {
+			const tile = getTile(id);
+			if (
+				tile?.type === "term" &&
+				tile.ptySessionId === payload.sessionId
+			) {
+				tileManager.closeCanvasTile(id);
+				break;
+			}
+		}
+	});
+
+	window.shellApi.onPtyStatusChanged((payload) => {
+		terminalListWebview.send("pty-status-changed", payload);
+	});
+
+	// -- Terminal list init + click-to-focus --
+
+	terminalListWebview.webview.addEventListener(
+		"dom-ready", async () => {
+			const discovered =
+				await window.shellApi.ptyDiscover?.() ?? [];
+			const initEntries = [];
+			for (const [id] of tileManager.getTileDOMs()) {
+				const tile = getTile(id);
+				if (tile?.type === "term" && tile.ptySessionId) {
+					const disc = discovered.find(
+						(d) => d.sessionId === tile.ptySessionId,
+					);
+					initEntries.push({
+						sessionId: tile.ptySessionId,
+						shell: disc?.meta?.shell || "zsh",
+						cwd: disc?.meta?.cwd || "~",
+						foreground: null,
+						tileId: tile.id,
+					});
+				}
+			}
+			terminalListWebview.send(
+				"terminal-list:init", initEntries,
+			);
+
+			const focusedId = tileManager.getFocusedTileId();
+			if (focusedId) {
+				const tile = getTile(focusedId);
+				terminalListWebview.send(
+					"terminal-list:focus",
+					tile?.ptySessionId || null,
+				);
+			}
+		},
+	);
+
+	terminalListWebview.webview.addEventListener(
+		"ipc-message", (event) => {
+			if (event.channel === "terminal-list:focus-tile") {
+				const sessionId = event.args[0];
+				for (const [id] of tileManager.getTileDOMs()) {
+					const tile = getTile(id);
+					if (
+						tile?.type === "term" &&
+						tile.ptySessionId === sessionId
+					) {
+						const rect =
+							canvasEl.getBoundingClientRect();
+						const cx = tile.x + tile.width / 2;
+						const cy = tile.y + tile.height / 2;
+						viewportState.panX =
+							rect.width / 2
+							- cx * viewportState.zoom;
+						viewportState.panY =
+							rect.height / 2
+							- cy * viewportState.zoom;
+						viewport.updateCanvas();
+						tileManager.repositionAllTiles();
+						tileManager.focusCanvasTile(id);
+						break;
+					}
+				}
+			}
+		},
+	);
+
 	// -- Nav resize --
 
 	panelManager.setupResize(() => {
-		panelManager.updateTogglePositions();
+		panelManager.updateTogglePosition();
 	});
 
 	const panelsEl = document.getElementById("panels");
 	new ResizeObserver(() => {
-		panelManager.updateTogglePositions();
+		panelManager.updateTogglePosition();
+		terminalPanel.updateTogglePosition();
 	}).observe(panelsEl);
 
 	// -- Nav toggle --
 
 	navToggle.addEventListener("click", () => {
-		panelManager.toggleNav();
+		panelManager.toggle();
+	});
+
+	terminalToggle.addEventListener("click", () => {
+		terminalPanel.toggle();
 	});
 
 	// -- Settings --
@@ -1065,7 +1210,11 @@ async function init() {
 		workspaceManager.switchWorkspace(0);
 	}
 
-	panelManager.applyNavVisibility();
+	panelManager.applyVisibility();
+	terminalPanel.applyVisibility();
+	terminalPanel.setupResize(() => {
+		terminalPanel.updateTogglePosition();
+	});
 
 	// -- beforeunload save --
 

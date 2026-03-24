@@ -172,6 +172,7 @@ interface ShortcutEntry {
 
 const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry> = {
   Backslash: { modifier: cmdOrCtrl, action: "toggle-nav" },
+  Backquote: { modifier: cmdOrCtrl, action: "toggle-terminal-list" },
   Comma: { modifier: cmdOrCtrl, action: "toggle-settings" },
   KeyW: { modifier: shiftCmdOrCtrl, action: "close-tab" },
   KeyO: { modifier: shiftCmdOrCtrl, action: "add-workspace" },
@@ -180,6 +181,7 @@ const TOGGLE_SHORTCUTS: Record<string, ShortcutEntry> = {
 
 const TOGGLE_SHORTCUT_KEYS: Record<string, ShortcutEntry> = {
   "\\": TOGGLE_SHORTCUTS.Backslash!,
+  "`": TOGGLE_SHORTCUTS.Backquote!,
   ",": TOGGLE_SHORTCUTS.Comma!,
   w: TOGGLE_SHORTCUTS.KeyW!,
   o: TOGGLE_SHORTCUTS.KeyO!,
@@ -384,6 +386,12 @@ function buildAppMenu(): void {
           registerAccelerator: false,
           click: () => sendShortcut("toggle-nav"),
         },
+        {
+          label: "Toggle Terminal List",
+          accelerator: "CommandOrControl+`",
+          registerAccelerator: false,
+          click: () => sendShortcut("toggle-terminal-list"),
+        },
         { type: "separator" },
         {
           label: "Zoom In",
@@ -516,6 +524,7 @@ ipcMain.handle("shell:get-view-config", () => {
     terminalTile: { src: getRendererURL("terminal-tile"), preload },
     graphTile: { src: getRendererURL("graph-tile"), preload },
     settings: { src: getRendererURL("settings"), preload },
+    terminalList: { src: getRendererURL("terminal-list"), preload },
   };
 });
 
@@ -597,6 +606,11 @@ ipcMain.handle(
 ipcMain.handle(
   "pty:discover",
   () => pty.discoverSessions(),
+);
+
+ipcMain.handle(
+  "pty:foreground-process",
+  (_event, sessionId: string) => pty.getForegroundProcess(sessionId),
 );
 
 let settingsOpen = false;

@@ -172,6 +172,18 @@ body {
 	z-index: 110;
 }
 
+#panel-terminal {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-height: 0;
+	background: var(--bg);
+}
+
+#panel-terminal webview {
+	flex: 1;
+}
+
 /* ── Nav toolbar ── */
 
 #nav-toolbar {
