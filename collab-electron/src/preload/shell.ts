@@ -153,6 +153,8 @@ contextBridge.exposeInMainWorld("shellApi", {
   canvasLoadState: () => ipcRenderer.invoke("canvas:load-state"),
   canvasSaveState: (state: unknown) =>
     ipcRenderer.invoke("canvas:save-state", state),
+  canvasWorkspaceHash: (): Promise<string> =>
+    ipcRenderer.invoke("canvas:workspace-hash"),
 
   getDragPaths: () => ipcRenderer.invoke("drag:get-paths"),
 
