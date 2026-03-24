@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AppConfig, type TreeNode, type ViewerItem } from "@collab/shared/types";
 import {
 	parseFileToViewerItem,
@@ -13,7 +13,9 @@ import "@collab/components/FolderTableView/FolderTableView.css";
 import "@collab/components/TreeView/TreeView.css";
 import "@collab/components/Editor/Blocknote.css";
 import "@collab/components/Editor/WikiLink.css";
-import { CodeEditorView } from "@collab/components/CodeEditorView";
+const CodeEditorView = React.lazy(
+	() => import("@collab/components/CodeEditorView").then(m => ({ default: m.CodeEditorView }))
+);
 import "@collab/components/CodeEditorView/CodeEditorView.css";
 import { isImageFile } from "@collab/shared/image";
 import { extractCoverImageUrl } from "@collab/shared/extract-cover-image";
@@ -588,14 +590,16 @@ export default function App() {
 				)}
 				{hasCodeFile && displayedPath && (
 					<>
-						<CodeEditorView
-							filePath={displayedPath}
-							content={fileContent}
-							onContentChange={saveCodeContent}
-							theme={theme}
-							editingDisabled={editingDisabled}
-							className={isTileMode ? "canvas-tile-embed" : undefined}
-						/>
+						<Suspense fallback={<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",opacity:0.5}}>Loading editor...</div>}>
+							<CodeEditorView
+								filePath={displayedPath}
+								content={fileContent}
+								onContentChange={saveCodeContent}
+								theme={theme}
+								editingDisabled={editingDisabled}
+								className={isTileMode ? "canvas-tile-embed" : undefined}
+							/>
+						</Suspense>
 					</>
 				)}
 				{hasImageFile && displayedPath && (
