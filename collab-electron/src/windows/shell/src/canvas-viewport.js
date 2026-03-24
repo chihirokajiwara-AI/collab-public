@@ -12,6 +12,7 @@ export function createViewport(canvasEl, gridCanvas) {
 	const gridCtx = gridCanvas.getContext("2d");
 	let state = null;
 	let onUpdate = null;
+	let onViewportChange = null;
 	let zoomSnapTimer = null;
 	let zoomSnapRaf = null;
 	let lastZoomFocalX = 0;
@@ -84,6 +85,7 @@ export function createViewport(canvasEl, gridCanvas) {
 	function updateCanvas() {
 		drawGrid();
 		if (onUpdate) onUpdate();
+		if (onViewportChange) onViewportChange();
 	}
 
 	function snapBackZoom() {
@@ -187,5 +189,8 @@ export function createViewport(canvasEl, gridCanvas) {
 		},
 		updateCanvas,
 		applyZoom,
+		setOnViewportChange(cb) {
+			onViewportChange = cb;
+		},
 	};
 }
