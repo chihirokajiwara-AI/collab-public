@@ -1,12 +1,10 @@
-import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rename, mkdir, copyFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import * as crypto from "node:crypto";
 import { COLLAB_DIR } from "./paths";
-
-const STATE_DIR = COLLAB_DIR;
-const STATE_FILE = join(STATE_DIR, "canvas-state.json");
 
 interface TileState {
   id: string;
@@ -37,9 +35,34 @@ function sanitizeCoord(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-export async function loadState(): Promise<CanvasState | null> {
+export function workspaceHash(wsPath: string): string {
+  return createHash("sha256").update(wsPath).digest("hex").slice(0, 16);
+}
+
+function stateFileForWorkspace(wsPath: string): string {
+  return join(COLLAB_DIR, "workspaces", workspaceHash(wsPath), "canvas-state.json");
+}
+
+export async function migrateGlobalState(wsPath: string): Promise<void> {
+  const globalFile = join(COLLAB_DIR, "canvas-state.json");
+  const migratedFile = globalFile + ".migrated";
+  const perWsFile = stateFileForWorkspace(wsPath);
+
+  if (existsSync(globalFile) && !existsSync(perWsFile)) {
+    const perWsDir = dirname(perWsFile);
+    if (!existsSync(perWsDir)) {
+      await mkdir(perWsDir, { recursive: true });
+    }
+    await copyFile(globalFile, perWsFile);
+    await rename(globalFile, migratedFile);
+  }
+}
+
+export async function loadState(workspacePath: string): Promise<CanvasState | null> {
+  if (!workspacePath) return null;
+  const stateFile = stateFileForWorkspace(workspacePath);
   try {
-    const raw = await readFile(STATE_FILE, "utf-8");
+    const raw = await readFile(stateFile, "utf-8");
     const state = JSON.parse(raw) as CanvasState;
     if (state.version !== 1) return null;
     for (const tile of state.tiles) {
@@ -52,9 +75,12 @@ export async function loadState(): Promise<CanvasState | null> {
   }
 }
 
-export async function saveState(state: CanvasState): Promise<void> {
-  if (!existsSync(STATE_DIR)) {
-    await mkdir(STATE_DIR, { recursive: true });
+export async function saveState(workspacePath: string, state: CanvasState): Promise<void> {
+  if (!workspacePath) return;
+  const stateFile = stateFileForWorkspace(workspacePath);
+  const stateDir = dirname(stateFile);
+  if (!existsSync(stateDir)) {
+    await mkdir(stateDir, { recursive: true });
   }
   const tmp = join(
     tmpdir(),
@@ -62,5 +88,5 @@ export async function saveState(state: CanvasState): Promise<void> {
   );
   const json = JSON.stringify(state, null, 2);
   await writeFile(tmp, json, "utf-8");
-  await rename(tmp, STATE_FILE);
+  await rename(tmp, stateFile);
 }

@@ -33,6 +33,7 @@ export function createTileManager({
 	onTerminalTileClosed,
 	onTileFocused,
 	onTileDblClick,
+	getWorkspaceHash,
 }) {
 	/** @type {Map<string, {container: HTMLElement, contentArea: HTMLElement, titleText: HTMLElement, webview?: HTMLElement}>} */
 	const tileDOMs = new Map();
@@ -282,7 +283,8 @@ export function createTileManager({
 		const wv = document.createElement("webview");
 		wv.setAttribute("src", url);
 		wv.setAttribute("allowpopups", "");
-		wv.setAttribute("partition", "persist:browser");
+		const wsHash = getWorkspaceHash ? getWorkspaceHash() : "default";
+		wv.setAttribute("partition", `persist:ws-${wsHash}`);
 		wv.setAttribute(
 			"webpreferences", "contextIsolation=yes, sandbox=yes",
 		);
@@ -636,6 +638,16 @@ export function createTileManager({
 		return tile;
 	}
 
+	function clearCanvasBatch() {
+		for (const [, dom] of tileDOMs) {
+			dom.container.remove();
+		}
+		tileDOMs.clear();
+		clearSelection();
+		tiles.length = 0;
+		focusedTileId = null;
+	}
+
 	function clearCanvas(viewportObj) {
 		const tileIds = tiles.map((t) => t.id);
 		for (const id of tileIds) {
@@ -886,6 +898,7 @@ export function createTileManager({
 		createFileTile,
 		createGraphTile,
 		clearCanvas,
+		clearCanvasBatch,
 		getCanvasStateForSave,
 		restoreCanvasState,
 		checkDeferredTiles,

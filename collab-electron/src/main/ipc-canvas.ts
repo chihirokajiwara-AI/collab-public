@@ -22,15 +22,33 @@ export function registerCanvasHandlers(
 ): void {
   let pendingDragPaths: string[] = [];
 
-  // Canvas persistence
+  // Canvas persistence (per-workspace)
   ipcMain.handle(
     "canvas:load-state",
-    async () => canvasPersistence.loadState(),
+    async () => {
+      const wsPath = ctx.getActiveWorkspacePath();
+      if (!wsPath) return null;
+      await canvasPersistence.migrateGlobalState(wsPath);
+      return canvasPersistence.loadState(wsPath);
+    },
   );
 
   ipcMain.handle(
     "canvas:save-state",
-    async (_event, state) => canvasPersistence.saveState(state),
+    async (_event, state) => {
+      const wsPath = ctx.getActiveWorkspacePath();
+      if (!wsPath) return;
+      return canvasPersistence.saveState(wsPath, state);
+    },
+  );
+
+  ipcMain.handle(
+    "canvas:workspace-hash",
+    () => {
+      const wsPath = ctx.getActiveWorkspacePath();
+      if (!wsPath) return "default";
+      return canvasPersistence.workspaceHash(wsPath);
+    },
   );
 
   // Canvas pinch forwarding

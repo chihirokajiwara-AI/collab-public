@@ -272,6 +272,8 @@ async function init() {
 
 	// -- Tile manager --
 
+	let currentWorkspaceHash = "default";
+
 	const tileManager = createTileManager({
 		tileLayer, viewportState, configs,
 		getAllWebviews,
@@ -314,6 +316,7 @@ async function init() {
 		onTileDblClick(tile) {
 			edgeIndicators.panToTile(tile);
 		},
+		getWorkspaceHash: () => currentWorkspaceHash,
 	});
 
 	// -- Edge indicators --
@@ -1277,8 +1280,17 @@ async function init() {
 		});
 	}
 
-	// -- Restore canvas state --
+	// -- Initialize workspaces --
 
+	const { workspaces: wsPaths, active } = workspaceData;
+
+	for (const path of wsPaths) {
+		workspaceManager.addWorkspace(path);
+	}
+
+	// -- Restore canvas state (after workspaces so hash is correct) --
+
+	currentWorkspaceHash = await window.shellApi.canvasWorkspaceHash();
 	const savedState = await window.shellApi.canvasLoadState();
 	if (savedState) {
 		const { centerX, centerY, zoom } = savedState.viewport;
@@ -1328,6 +1340,37 @@ async function init() {
 	terminalPanel.applyVisibility();
 	terminalPanel.setupResize(() => {
 		terminalPanel.updateTogglePosition();
+	});
+
+	// -- Workspace-changed: swap canvas state --
+
+	window.shellApi.onWorkspaceChanged(async (newPath) => {
+		if (!newPath) return;
+
+		// 1. Flush current canvas state
+		tileManager.saveCanvasImmediate();
+
+		// 2. Clear all tiles without per-tile saves
+		tileManager.clearCanvasBatch();
+
+		// 3. Update workspace hash for browser partitions
+		currentWorkspaceHash = await window.shellApi.canvasWorkspaceHash();
+
+		// 4. Load new workspace canvas state
+		const newState = await window.shellApi.canvasLoadState();
+		if (newState) {
+			viewportState.panX = newState.viewport.panX;
+			viewportState.panY = newState.viewport.panY;
+			viewportState.zoom = newState.viewport.zoom;
+			viewport.updateCanvas();
+			tileManager.restoreCanvasState(newState.tiles);
+		} else {
+			viewportState.panX = 0;
+			viewportState.panY = 0;
+			viewportState.zoom = 1;
+			viewport.updateCanvas();
+		}
+		edgeIndicators.update();
 	});
 
 	// -- beforeunload save --
