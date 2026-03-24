@@ -511,13 +511,48 @@ export function createTileManager({
 		if (!dom) return tile;
 
 		if (type === "image") {
+			const imgContainer = document.createElement("div");
+			imgContainer.style.cssText = "overflow:hidden;width:100%;height:100%;cursor:grab;";
+
 			const img = document.createElement("img");
-			img.src = `collab-file://${filePath}`;
-			img.style.width = "100%";
-			img.style.height = "100%";
-			img.style.objectFit = "contain";
+			img.src = `collab-file://${tile.filePath}`;
+			img.style.cssText = "width:100%;height:100%;object-fit:contain;transform-origin:center;pointer-events:none;";
 			img.draggable = false;
-			dom.contentArea.appendChild(img);
+			imgContainer.appendChild(img);
+
+			let imgZoom = 1, imgPanX = 0, imgPanY = 0;
+			function applyTransform() {
+				img.style.transform = `translate(${imgPanX}px, ${imgPanY}px) scale(${imgZoom})`;
+			}
+
+			// Wheel zoom (stopPropagation prevents canvas zoom)
+			imgContainer.addEventListener("wheel", (e) => {
+				e.stopPropagation(); e.preventDefault();
+				imgZoom = Math.max(0.1, Math.min(10, imgZoom * Math.exp(-e.deltaY * 0.003)));
+				applyTransform();
+			}, { passive: false });
+
+			// Drag to pan
+			let dragging = false, sx = 0, sy = 0, spx = 0, spy = 0;
+			imgContainer.addEventListener("mousedown", (e) => {
+				if (e.button !== 0) return;
+				dragging = true; sx = e.clientX; sy = e.clientY; spx = imgPanX; spy = imgPanY;
+				imgContainer.style.cursor = "grabbing";
+			});
+			window.addEventListener("mousemove", (e) => {
+				if (!dragging) return;
+				imgPanX = spx + (e.clientX - sx) / imgZoom;
+				imgPanY = spy + (e.clientY - sy) / imgZoom;
+				applyTransform();
+			});
+			window.addEventListener("mouseup", () => { dragging = false; imgContainer.style.cursor = "grab"; });
+
+			// Double-click to reset
+			imgContainer.addEventListener("dblclick", () => {
+				imgZoom = 1; imgPanX = 0; imgPanY = 0; applyTransform();
+			});
+
+			dom.contentArea.appendChild(imgContainer);
 		} else {
 			const wv = document.createElement("webview");
 			const viewerConfig = configs.viewer;
