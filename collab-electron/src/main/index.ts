@@ -14,6 +14,7 @@ import {
   type WebContents,
 } from "electron";
 import { execFileSync } from "node:child_process";
+import { setupWebviewSecurity, setupPermissionHandler } from "./security";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
