@@ -1,5 +1,5 @@
 const ZOOM_MIN = 0.33;
-const ZOOM_MAX = 1;
+const ZOOM_MAX = 2;
 const ZOOM_RUBBER_BAND_K = 400;
 const CELL = 20;
 const MAJOR = 80;
@@ -52,7 +52,7 @@ export function createViewport(canvasEl, gridCanvas) {
 
 		const dotOffX = ((state.panX % step) + step) % step;
 		const dotOffY = ((state.panY % step) + step) % step;
-		const dotSize = Math.max(1, 1.5 * state.zoom);
+		const dotSize = Math.max(1, Math.min(2.5, 1.5 * state.zoom));
 		gridCtx.fillStyle = dark
 			? "rgba(255,255,255,0.22)"
 			: "rgba(0,0,0,0.20)";
@@ -64,7 +64,7 @@ export function createViewport(canvasEl, gridCanvas) {
 			}
 		}
 
-		const majorDotSize = Math.max(1, 1.5 * state.zoom);
+		const majorDotSize = Math.max(1, Math.min(2.5, 1.5 * state.zoom));
 		gridCtx.fillStyle = dark
 			? "rgba(255,255,255,0.40)"
 			: "rgba(0,0,0,0.35)";
