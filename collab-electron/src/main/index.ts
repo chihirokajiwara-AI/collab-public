@@ -781,6 +781,8 @@ app.whenReady().then(async () => {
 
   buildAppMenu();
   createWindow();
+  setupWebviewSecurity(mainWindow!.webContents);
+  setupPermissionHandler(mainWindow!.webContents.session);
   registerToggleShortcuts(mainWindow!);
 
   initMainAnalytics();
