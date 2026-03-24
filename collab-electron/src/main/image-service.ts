@@ -77,12 +77,17 @@ function isInsideCacheDir(path: string): boolean {
   return cacheDir !== null && path.startsWith(cacheDir + "/");
 }
 
-export function getImageThumbnail(
+export async function getImageThumbnail(
   path: string,
   size: number,
 ): Promise<string> {
-  if (isInsideCacheDir(path)) return Promise.resolve("");
-  return request("thumbnail", path, { size }) as Promise<string>;
+  if (isInsideCacheDir(path)) return "";
+  try {
+    return (await request("thumbnail", path, { size })) as string;
+  } catch (err) {
+    console.warn(`[image:thumbnail] Skipping: ${path}`, (err as Error).message);
+    return "";
+  }
 }
 
 function isNativeImage(path: string): boolean {
