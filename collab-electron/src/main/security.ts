@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Session, WebContents } from "electron";
 
 const BLOCKED_PROTOCOLS = ["javascript:", "data:", "file:", "blob:"];
@@ -26,33 +27,43 @@ const TRUSTED_PRELOAD_DIR = join(__dirname, "..", "preload");
 
 function isTrustedPreload(preloadPath: string | undefined): boolean {
   if (!preloadPath) return false;
-  // Normalize and check that the preload is within our app's preload directory
-  const resolved = join(preloadPath);
+  // preload can arrive as file:// URL or plain path — normalize both
+  let resolved: string;
+  try {
+    resolved = preloadPath.startsWith("file://")
+      ? fileURLToPath(preloadPath)
+      : join(preloadPath);
+  } catch {
+    return false;
+  }
   return resolved.startsWith(TRUSTED_PRELOAD_DIR);
 }
 
 /**
  * Attaches security handlers to the given WebContents:
- * - will-attach-webview: enforces nodeIntegration:false, contextIsolation:true,
- *   sandbox:true. Strips preloads ONLY for untrusted (external) webviews.
- *   Internal webviews (terminal, viewer, graph) keep their trusted preload.
+ * - will-attach-webview: for browser tiles (partition starts with "persist:ws-"),
+ *   strips preloads and enforces strict sandbox. For internal webviews
+ *   (terminal, viewer, graph — no partition or empty partition),
+ *   preserves preloads so IPC communication works.
  * - setWindowOpenHandler: denies all new window requests
  */
 export function setupWebviewSecurity(webContents: WebContents): void {
   webContents.on(
     "will-attach-webview",
-    (_event, webPreferences, _params) => {
-      // Only strip preload if it's NOT our own trusted preload.
-      // Internal webviews (terminal, viewer, graph) need the preload
-      // to communicate with the main process via IPC.
-      if (!isTrustedPreload(webPreferences.preload)) {
-        delete webPreferences.preload;
-      }
+    (_event, webPreferences, params) => {
+      const partition = params.partition || "";
+      const isBrowserTile = partition.startsWith("persist:ws-");
 
-      // Always enforce strict sandboxing.
-      webPreferences.nodeIntegration = false;
-      webPreferences.contextIsolation = true;
-      webPreferences.sandbox = true;
+      if (isBrowserTile) {
+        // External content — full lockdown
+        delete webPreferences.preload;
+        webPreferences.nodeIntegration = false;
+        webPreferences.contextIsolation = true;
+        webPreferences.sandbox = true;
+      }
+      // Internal webviews (terminal, viewer, graph) — keep preload intact,
+      // they already have contextIsolation:true via the preload bridge.
+      // nodeIntegration is already false by default in Electron 40.
     },
   );
 
