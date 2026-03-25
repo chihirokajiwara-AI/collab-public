@@ -27,6 +27,7 @@ const CLICK_THRESHOLD = 3;
  * @param {(tileId: string) => void} opts.onShiftClick
  * @param {() => boolean} [opts.isSpaceHeld] - when true, suppress drag (canvas is panning)
  * @param {HTMLElement} [opts.contentOverlay] - secondary drag surface over tile content
+ * @param {(tileId: string, before: {x: number, y: number}, after: {x: number, y: number}) => void} [opts.onDragEnd]
  */
 export function attachDrag(titleBar, tile, {
   viewport,
@@ -39,6 +40,7 @@ export function attachDrag(titleBar, tile, {
   onFocus,
   isSpaceHeld,
   contentOverlay,
+  onDragEnd,
 }) {
   function startDrag(e, { deferFocus = false } = {}) {
     if (e.button !== 0) return;
@@ -107,9 +109,11 @@ export function attachDrag(titleBar, tile, {
         for (const entry of groupCtx) {
           entry.container.classList.remove("tile-dragging");
           snapToGrid(entry.tile);
+          if (onDragEnd) onDragEnd(entry.tile.id, { x: entry.startX, y: entry.startY }, { x: entry.tile.x, y: entry.tile.y });
         }
       } else {
         snapToGrid(tile);
+        if (onDragEnd) onDragEnd(tile.id, { x: startTX, y: startTY }, { x: tile.x, y: tile.y });
       }
       onUpdate();
     }
@@ -264,9 +268,10 @@ export function attachMarquee(canvasEl, {
  * @param {object} viewport
  * @param {() => void} onUpdate
  * @param {() => Array<{webview: HTMLElement}>} getAllWebviews
+ * @param {(tileId: string, before: {width: number, height: number}, after: {width: number, height: number}) => void} [onResizeEnd]
  */
 export function attachResize(
-  container, tile, viewport, onUpdate, getAllWebviews, onFocus,
+  container, tile, viewport, onUpdate, getAllWebviews, onResizeEnd, onFocus,
 ) {
   const edges = ["n", "s", "e", "w"];
   const corners = ["nw", "ne", "sw", "se"];
@@ -335,6 +340,7 @@ export function attachResize(
           wv.webview.style.pointerEvents = "";
         }
         snapToGrid(tile);
+        if (onResizeEnd) onResizeEnd(tile.id, { width: startW, height: startH }, { width: tile.width, height: tile.height });
         onUpdate();
         if (onFocus) onFocus();
       }
