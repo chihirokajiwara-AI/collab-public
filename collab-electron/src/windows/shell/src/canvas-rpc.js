@@ -83,7 +83,10 @@ export function createCanvasRpc({
 						: findAutoPlacement(tiles, size.width, size.height);
 
 					let tile;
-					if (tileType === "graph") {
+					if (tileType === "term") {
+						tile = tileManager.createCanvasTile("term", pos.x, pos.y);
+						tileManager.spawnTerminalWebview(tile, false);
+					} else if (tileType === "graph") {
 						const ws = workspaceManager.getActiveWorkspace();
 						const wsPath = ws?.path ?? "";
 						tile = tileManager.createGraphTile(
