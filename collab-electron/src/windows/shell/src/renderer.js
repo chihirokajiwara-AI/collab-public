@@ -193,6 +193,18 @@ async function init() {
 		getWorkspaceHash: () => currentWorkspaceHash,
 	});
 
+	// -- Undo/Redo keyboard shortcuts --
+
+	document.addEventListener("keydown", (e) => {
+		if (e.metaKey && e.key === "z" && !e.shiftKey) {
+			e.preventDefault();
+			tileManager.executeUndo();
+		} else if (e.metaKey && e.key === "z" && e.shiftKey) {
+			e.preventDefault();
+			tileManager.executeRedo();
+		}
+	});
+
 	// -- Edge indicators --
 
 	const edgeIndicators = createEdgeIndicators({

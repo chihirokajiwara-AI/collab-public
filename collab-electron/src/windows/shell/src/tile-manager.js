@@ -8,6 +8,7 @@ import {
 	createTileDOM, positionTile, updateTileTitle, getTileLabel,
 } from "./tile-renderer.js";
 import { attachDrag, attachResize } from "./tile-interactions.js";
+import { pushCommand, undo, redo } from "./canvas-undo.js";
 
 /**
  * Returns true if the tile's screen-space rectangle overlaps the viewport.
@@ -481,11 +482,19 @@ export function createTileManager({
 			onFocus: (id, e) => focusCanvasTile(id, e),
 			isSpaceHeld,
 			contentOverlay: dom.contentOverlay,
+			onDragEnd: (tileId, before, after) => {
+				pushCommand({ type: "tile-move", tileId, before, after });
+				saveCanvasDebounced();
+			},
 		});
 		attachResize(
 			dom.container, tile, viewport,
 			repositionAllTiles,
 			getAllWebviews,
+			(tileId, before, after) => {
+				pushCommand({ type: "tile-resize", tileId, before, after });
+				saveCanvasDebounced();
+			},
 		);
 
 		tileLayer.appendChild(dom.container);
@@ -500,13 +509,16 @@ export function createTileManager({
 	}
 
 	function closeCanvasTile(id) {
+		const tile = getTile(id);
+		if (tile) {
+			pushCommand({ type: "tile-delete", tileId: id, deletedTile: { ...tile } });
+		}
 		const dom = tileDOMs.get(id);
 		if (dom) {
 			dom.container.remove();
 			tileDOMs.delete(id);
 		}
 		deselectTile(id);
-		const tile = getTile(id);
 		if (tile) {
 			window.shellApi.trackEvent(
 				"tile_closed", { type: tile.type },
@@ -863,5 +875,47 @@ export function createTileManager({
 		broadcastToTileWebviews,
 		saveCanvasDebounced,
 		saveCanvasImmediate,
+		executeUndo() {
+			const cmd = undo();
+			if (!cmd) return;
+			switch (cmd.type) {
+				case "tile-move": {
+					const tile = getTile(cmd.tileId);
+					if (tile) { tile.x = cmd.before.x; tile.y = cmd.before.y; snapToGrid(tile); this.repositionAllTiles(); this.saveCanvasDebounced(); }
+					break;
+				}
+				case "tile-resize": {
+					const tile = getTile(cmd.tileId);
+					if (tile) { tile.width = cmd.before.width; tile.height = cmd.before.height; snapToGrid(tile); this.repositionAllTiles(); this.saveCanvasDebounced(); }
+					break;
+				}
+				case "tile-delete": {
+					addTile({ ...cmd.deletedTile });
+					this.restoreCanvasState([cmd.deletedTile]);
+					this.saveCanvasImmediate();
+					break;
+				}
+			}
+		},
+		executeRedo() {
+			const cmd = redo();
+			if (!cmd) return;
+			switch (cmd.type) {
+				case "tile-move": {
+					const tile = getTile(cmd.tileId);
+					if (tile) { tile.x = cmd.after.x; tile.y = cmd.after.y; snapToGrid(tile); this.repositionAllTiles(); this.saveCanvasDebounced(); }
+					break;
+				}
+				case "tile-resize": {
+					const tile = getTile(cmd.tileId);
+					if (tile) { tile.width = cmd.after.width; tile.height = cmd.after.height; snapToGrid(tile); this.repositionAllTiles(); this.saveCanvasDebounced(); }
+					break;
+				}
+				case "tile-delete": {
+					this.closeCanvasTile(cmd.tileId);
+					break;
+				}
+			}
+		},
 	};
 }
