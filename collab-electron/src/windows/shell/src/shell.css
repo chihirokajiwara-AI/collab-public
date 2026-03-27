@@ -60,6 +60,11 @@ body {
 	background: transparent;
 }
 
+html.platform-win,
+body.platform-win {
+	background: var(--bg);
+}
+
 /* ── Titlebar ── */
 
 #titlebar {
@@ -121,6 +126,10 @@ body {
 	background: rgba(var(--bg-rgb), calc(1 - (1 - var(--canvas-opacity)) / 2));
 }
 
+.platform-win #panel-nav {
+	background: var(--bg);
+}
+
 #panel-nav::after {
 	content: '';
 	position: absolute;
@@ -159,6 +168,10 @@ body {
 	outline: none;
 }
 
+.platform-win #panel-viewer {
+	background: var(--canvas-bg);
+}
+
 #grid-canvas {
 	position: absolute;
 	inset: 0;
@@ -181,6 +194,10 @@ body {
 	min-height: 0;
 	border-left: 1px solid var(--border);
 	background: rgba(var(--bg-rgb), calc(1 - (1 - var(--canvas-opacity)) / 2));
+}
+
+.platform-win #panel-terminal {
+	background: var(--bg);
 }
 
 #panel-terminal webview {

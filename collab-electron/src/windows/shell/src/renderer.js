@@ -12,14 +12,19 @@ import { createPanel } from "./panel-manager.js";
 import { createWorkspaceManager } from "./workspace-manager.js";
 import { createCanvasRpc } from "./canvas-rpc.js";
 import { createTileManager } from "./tile-manager.js";
+import { displayBasename } from "@collab/shared/path-utils";
 
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
+const IS_WINDOWS = window.shellApi.getPlatform() === "win32";
 
 const viewportState = { panX: 0, panY: 0, zoom: 1 };
 
 const canvasEl = document.getElementById("panel-viewer");
 const gridCanvas = document.getElementById("grid-canvas");
 canvasEl.tabIndex = -1;
+
+document.documentElement.classList.toggle("platform-win", IS_WINDOWS);
+document.body.classList.toggle("platform-win", IS_WINDOWS);
 
 // -- Dark mode --
 
@@ -258,11 +263,19 @@ async function init() {
 		},
 		onNoteSurfaceFocus: noteSurfaceFocus,
 		onFocusSurface: focusSurface,
-		onTerminalSessionCreated(tile) {
+		async onTerminalSessionCreated(tile) {
+			const discovered =
+				await window.shellApi.ptyDiscover?.() ?? [];
+			const session = discovered.find(
+				(entry) => entry.sessionId === tile.ptySessionId,
+			);
 			terminalListWebview.send("terminal-list:add", {
 				sessionId: tile.ptySessionId,
-				shell: "zsh",
-				cwd: tile.cwd || "~",
+				displayName: session?.meta?.displayName || "Terminal",
+				commandName: displayBasename(
+					session?.meta?.command || session?.meta?.shell || "shell",
+				),
+				cwd: session?.meta?.cwdHostPath || session?.meta?.cwd || tile.cwd || "~",
 				foreground: null,
 				tileId: tile.id,
 			});
@@ -973,8 +986,11 @@ async function init() {
 					);
 					initEntries.push({
 						sessionId: tile.ptySessionId,
-						shell: disc?.meta?.shell || "zsh",
-						cwd: disc?.meta?.cwd || "~",
+						displayName: disc?.meta?.displayName || "Terminal",
+						commandName: displayBasename(
+							disc?.meta?.command || disc?.meta?.shell || "shell",
+						),
+						cwd: disc?.meta?.cwdHostPath || disc?.meta?.cwd || "~",
 						foreground: null,
 						tileId: tile.id,
 					});

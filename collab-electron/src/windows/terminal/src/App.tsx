@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { TerminalTab } from "@collab/components/Terminal";
+import { displayBasename } from "@collab/shared/path-utils";
 import "./styles/App.css";
 
 function estimateTermSize(): { cols: number; rows: number } {
@@ -16,7 +17,16 @@ function estimateTermSize(): { cols: number; rows: number } {
 interface Session {
   id: string;
   title: string;
-  shellName: string;
+  displayName: string;
+  commandName: string;
+  target: string;
+}
+
+function buildCdCommand(path: string, target: string): string {
+  if (target === "powershell") {
+    return `Set-Location -LiteralPath '${path.replace(/'/g, "''")}'`;
+  }
+  return `cd '${path.replace(/'/g, "'\\''")}'`;
 }
 
 function App() {
@@ -34,11 +44,13 @@ function App() {
       config?.workspaces?.[config?.active_workspace] || undefined;
     const { cols, rows } = estimateTermSize();
     const result = await window.api.ptyCreate(cwd, cols, rows);
-    const shellName = result.shell.split("/").pop() || "shell";
+    const commandName = displayBasename(result.command || result.shell) || "shell";
     const session: Session = {
       id: result.sessionId,
-      title: shellName,
-      shellName,
+      title: result.displayName,
+      displayName: result.displayName,
+      commandName,
+      target: result.target,
     };
     setSessions((prev) => [...prev, session]);
     setActiveId(result.sessionId);
@@ -164,11 +176,10 @@ function App() {
       try {
         const session = await ensureTab();
 
-        const escaped = path.replace(/'/g, "'\\''");
-        const cmd = `cd '${escaped}'`;
-
         const fg = await window.api.ptyForegroundProcess(session.id);
-        const isShellIdle = fg === session.shellName;
+        const isShellIdle =
+          fg === session.commandName || fg === session.displayName;
+        const cmd = buildCdCommand(path, session.target);
 
         const text = isShellIdle ? `${cmd}\r` : `!${cmd}\r`;
         for (const ch of text) {

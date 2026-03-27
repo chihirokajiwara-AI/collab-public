@@ -111,6 +111,7 @@ ipcRenderer.on("nav-visibility", navVisBuffer);
 
 contextBridge.exposeInMainWorld("api", {
   // Shared
+  getPlatform: (): NodeJS.Platform => process.platform,
   getConfig: () => ipcRenderer.invoke("config:get"),
   getAppVersion: () => ipcRenderer.invoke("app:version"),
   getDeviceId: () =>
@@ -118,6 +119,8 @@ contextBridge.exposeInMainWorld("api", {
   getPref: (key: string) => ipcRenderer.invoke("pref:get", key),
   setPref: (key: string, value: unknown) =>
     ipcRenderer.invoke("pref:set", key, value),
+  listTerminalTargets: () =>
+    ipcRenderer.invoke("terminal:list-targets"),
   getWorkspacePref: (key: string) =>
     ipcRenderer.invoke("workspace-pref:get", key),
   setWorkspacePref: (key: string, value: unknown) =>

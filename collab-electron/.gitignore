@@ -42,6 +42,11 @@ electron/out/
 CLAUDE.md
 build/
 scripts/
+!scripts/
+!scripts/*.mjs
+!scripts/*.cjs
+!scripts/*.sh
+!scripts/*.cmd
 docs/
 dev-app-update.yml
 build-debug.log

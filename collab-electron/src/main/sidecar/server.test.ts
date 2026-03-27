@@ -11,6 +11,7 @@ import * as net from "node:net";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { execFileSync } from "node:child_process";
 import { SidecarServer } from "./server";
 import {
   makeRequest,
@@ -25,10 +26,31 @@ import {
 
 // Use short temp dir to stay under macOS 104-byte sun_path limit
 const TEST_DIR = path.join(os.tmpdir(), `sc-${process.pid}`);
-const CONTROL_SOCK = path.join(TEST_DIR, "ctrl.sock");
+const CONTROL_SOCK = process.platform === "win32"
+  ? `\\\\.\\pipe\\sc-${process.pid}-ctrl`
+  : path.join(TEST_DIR, "ctrl.sock");
 const SESSION_DIR = path.join(TEST_DIR, "s");
 const PID_PATH = path.join(TEST_DIR, "pid");
 const TOKEN = "test-token-abc123";
+
+const TEST_CWD = process.platform === "win32" ? os.tmpdir() : "/tmp";
+const TEST_SHELL = process.platform === "win32"
+  ? {
+    command: "powershell.exe",
+    args: ["-NoLogo"],
+    displayName: "PowerShell",
+    target: "powershell",
+    echo: (marker: string) => `Write-Output '${marker}'\n`,
+    exit: "exit\n",
+  }
+  : {
+    command: "/bin/sh",
+    args: [],
+    displayName: "sh",
+    target: "shell",
+    echo: (marker: string) => `echo ${marker}\n`,
+    exit: "exit\n",
+  };
 
 let server: SidecarServer | null = null;
 
@@ -122,8 +144,12 @@ async function createSession(
   id: number,
 ): Promise<SessionCreateResult> {
   const resp = await rpcCall(ctrl, id, "session.create", {
-    shell: "/bin/sh",
-    cwd: "/tmp",
+    command: TEST_SHELL.command,
+    args: TEST_SHELL.args,
+    displayName: TEST_SHELL.displayName,
+    target: TEST_SHELL.target,
+    cwdHostPath: TEST_CWD,
+    cwd: TEST_CWD,
     cols: 80,
     rows: 24,
   });
@@ -191,8 +217,12 @@ describe("SidecarServer session lifecycle", () => {
 
     const sock = await connectControl();
     const resp = await rpcCall(sock, 1, "session.create", {
-      shell: "/bin/sh",
-      cwd: "/tmp",
+      command: TEST_SHELL.command,
+      args: TEST_SHELL.args,
+      displayName: TEST_SHELL.displayName,
+      target: TEST_SHELL.target,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
       cols: 80,
       rows: 24,
     });
@@ -200,7 +230,9 @@ describe("SidecarServer session lifecycle", () => {
     const result = resp.result as SessionCreateResult;
     assert.match(result.sessionId, /^[0-9a-f]{16}$/);
     assert.ok(result.socketPath.includes(result.sessionId));
-    assert.ok(fs.existsSync(result.socketPath));
+    if (process.platform !== "win32") {
+      assert.ok(fs.existsSync(result.socketPath));
+    }
 
     sock.destroy();
   });
@@ -218,8 +250,12 @@ describe("SidecarServer session lifecycle", () => {
 
     const ctrl = await connectControl();
     const createResp = await rpcCall(ctrl, 1, "session.create", {
-      shell: "/bin/sh",
-      cwd: "/tmp",
+      command: TEST_SHELL.command,
+      args: TEST_SHELL.args,
+      displayName: TEST_SHELL.displayName,
+      target: TEST_SHELL.target,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
       cols: 80,
       rows: 24,
     });
@@ -233,7 +269,7 @@ describe("SidecarServer session lifecycle", () => {
     });
 
     // Send a command and wait for output
-    data.write("echo sidecar-test-output\n");
+    data.write(TEST_SHELL.echo("sidecar-test-output"));
     const output = await new Promise<string>((resolve, reject) => {
       let buf = "";
       const timer = setTimeout(() => {
@@ -272,8 +308,12 @@ describe("SidecarServer session lifecycle", () => {
 
     const sock = await connectControl();
     await rpcCall(sock, 1, "session.create", {
-      shell: "/bin/sh",
-      cwd: "/tmp",
+      command: TEST_SHELL.command,
+      args: TEST_SHELL.args,
+      displayName: TEST_SHELL.displayName,
+      target: TEST_SHELL.target,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
       cols: 80,
       rows: 24,
     });
@@ -282,7 +322,7 @@ describe("SidecarServer session lifecycle", () => {
     const { sessions } =
       listResp.result as { sessions: SessionInfo[] };
     assert.equal(sessions.length, 1);
-    assert.equal(sessions[0].shell, "/bin/sh");
+    assert.equal(sessions[0].shell, TEST_SHELL.command);
 
     sock.destroy();
   });
@@ -300,8 +340,12 @@ describe("SidecarServer session lifecycle", () => {
 
     const sock = await connectControl();
     const createResp = await rpcCall(sock, 1, "session.create", {
-      shell: "/bin/sh",
-      cwd: "/tmp",
+      command: TEST_SHELL.command,
+      args: TEST_SHELL.args,
+      displayName: TEST_SHELL.displayName,
+      target: TEST_SHELL.target,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
       cols: 80,
       rows: 24,
     });
@@ -333,8 +377,12 @@ describe("SidecarServer session lifecycle", () => {
 
     // Create session and write some output
     const createResp = await rpcCall(ctrl, 1, "session.create", {
-      shell: "/bin/sh",
-      cwd: "/tmp",
+      command: TEST_SHELL.command,
+      args: TEST_SHELL.args,
+      displayName: TEST_SHELL.displayName,
+      target: TEST_SHELL.target,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
       cols: 80,
       rows: 24,
     });
@@ -346,7 +394,7 @@ describe("SidecarServer session lifecycle", () => {
       const s = net.createConnection(socketPath, () => resolve(s));
       s.on("error", reject);
     });
-    data1.write("echo reconnect-marker\n");
+    data1.write(TEST_SHELL.echo("reconnect-marker"));
     await new Promise<void>((resolve) => {
       const onData = (chunk: Buffer) => {
         if (chunk.toString().includes("reconnect-marker")) {
@@ -413,7 +461,7 @@ describe("Shell exit sends session.exited notification", () => {
 
     // Connect data socket and send exit to terminate the shell
     const data = await connectDataSocket(socketPath);
-    data.write("exit\n");
+    data.write(TEST_SHELL.exit);
 
     // Wait for the notification to arrive
     const notification = await new Promise<JsonRpcNotification>(
@@ -455,7 +503,7 @@ describe("Last-attach-wins eviction", () => {
 
     // Connect data socket A and verify it works
     const dataA = await connectDataSocket(socketPath);
-    dataA.write("echo socket-a-marker\n");
+    dataA.write(TEST_SHELL.echo("socket-a-marker"));
     await waitForOutput(dataA, "socket-a-marker");
 
     // Connect data socket B (should evict A)
@@ -468,7 +516,7 @@ describe("Last-attach-wins eviction", () => {
     dataA.on("data", () => { aGotNewData = true; });
 
     // Verify B receives output
-    dataB.write("echo socket-b-marker\n");
+    dataB.write(TEST_SHELL.echo("socket-b-marker"));
     const output = await waitForOutput(dataB, "socket-b-marker");
     assert.ok(output.includes("socket-b-marker"));
 
@@ -544,7 +592,7 @@ describe("Reconnect queues output produced during gap", () => {
 
     // Connect first data socket, send command, wait for output
     const data1 = await connectDataSocket(socketPath);
-    data1.write("echo first-cmd-aaa\n");
+    data1.write(TEST_SHELL.echo("first-cmd-aaa"));
     await waitForOutput(data1, "first-cmd-aaa");
 
     // Disconnect first data socket
@@ -554,7 +602,7 @@ describe("Reconnect queues output produced during gap", () => {
     // Connect a second data socket directly (no reconnect)
     // to send another command while the session is alive
     const data2 = await connectDataSocket(socketPath);
-    data2.write("echo second-cmd-bbb\n");
+    data2.write(TEST_SHELL.echo("second-cmd-bbb"));
     await waitForOutput(data2, "second-cmd-bbb");
 
     // Disconnect second data socket
@@ -620,6 +668,56 @@ describe("Unknown RPC method returns error", () => {
     assert.equal(resp.error!.code, -32601);
     assert.ok(resp.error!.message.includes("nonexistent.method"));
 
+    ctrl.destroy();
+  });
+});
+
+describe("Windows WSL smoke", () => {
+  const isWindows = process.platform === "win32";
+  const defaultDistro = isWindows
+    ? (() => {
+      try {
+        const out = execFileSync("wsl.exe", ["-l", "-q"], {
+          encoding: "utf8",
+          timeout: 5000,
+          windowsHide: true,
+        });
+        return out.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? null;
+      } catch {
+        return null;
+      }
+    })()
+    : null;
+
+  it("can spawn a WSL session when a distro is installed", async (t) => {
+    if (!isWindows || !defaultDistro) {
+      t.skip("WSL not available");
+      return;
+    }
+
+    server = createServer();
+    await server.start();
+
+    const ctrl = await connectControl();
+    const createResp = await rpcCall(ctrl, 1, "session.create", {
+      command: "wsl.exe",
+      args: ["-d", defaultDistro],
+      displayName: defaultDistro,
+      target: `wsl:${defaultDistro}`,
+      cwdHostPath: TEST_CWD,
+      cwd: TEST_CWD,
+      cols: 80,
+      rows: 24,
+    });
+    const { socketPath } = createResp.result as SessionCreateResult;
+
+    const data = await connectDataSocket(socketPath);
+    data.write("echo WSL_SMOKE_OK\n");
+    const output = await waitForOutput(data, "WSL_SMOKE_OK", 10000);
+    assert.ok(output.includes("WSL_SMOKE_OK"));
+
+    data.write("exit\n");
+    data.destroy();
     ctrl.destroy();
   });
 });

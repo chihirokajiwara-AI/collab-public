@@ -7,6 +7,7 @@ import {
 import {
 	createTileDOM, positionTile, updateTileTitle, getTileLabel,
 } from "./tile-renderer.js";
+import { workspaceRootMatch } from "@collab/shared/path-utils";
 import { attachDrag, attachResize } from "./tile-interactions.js";
 import { findAutoPlacement } from "./canvas-rpc.js";
 
@@ -667,8 +668,7 @@ export function createTileManager({
 			}
 			if (
 				t.type === "graph" && t.folderPath &&
-				(t.folderPath === oldPath ||
-					t.folderPath.startsWith(oldPath + "/"))
+				workspaceRootMatch(oldPath, t.folderPath)
 			) {
 				t.folderPath =
 					newPath + t.folderPath.slice(oldPath.length);

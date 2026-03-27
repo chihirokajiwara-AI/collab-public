@@ -3,20 +3,19 @@ import "./App.css";
 
 interface TerminalEntry {
   sessionId: string;
-  shell: string;
+  displayName: string;
+  commandName: string;
   cwd: string;
   foreground: string | null;
   tileId: string;
 }
 
-function shellBasename(shell: string): string {
-  return shell.split("/").pop() || shell;
-}
-
 function isIdle(entry: TerminalEntry): boolean {
   if (!entry.foreground) return true;
-  const base = shellBasename(entry.shell);
-  return entry.foreground === base;
+  return (
+    entry.foreground === entry.commandName ||
+    entry.foreground === entry.displayName
+  );
 }
 
 function App() {
@@ -120,7 +119,7 @@ function App() {
             <div className="entry-info">
               <div className="entry-top">
                 <span className="shell-name">
-                  {shellBasename(entry.shell)}
+                  {entry.displayName}
                 </span>
                 <span className="status-label">
                   {idle

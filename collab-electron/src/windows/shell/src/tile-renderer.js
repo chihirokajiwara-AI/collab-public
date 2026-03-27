@@ -1,3 +1,5 @@
+import { splitDisplayPath } from "@collab/shared/path-utils";
+
 /**
  * Creates the DOM structure for a tile.
  * @param {import('./canvas-state.js').Tile} tile
@@ -190,10 +192,7 @@ export function getTileLabel(tile) {
 }
 
 export function splitFilepath(path) {
-  const parts = path.split("/");
-  const name = parts.pop() || path;
-  const parent = parts.length > 0 ? parts.join("/") + "/" : "";
-  return { parent, name };
+  return splitDisplayPath(path);
 }
 
 export function updateTileTitle(dom, tile) {
