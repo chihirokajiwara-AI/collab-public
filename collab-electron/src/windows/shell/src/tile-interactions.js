@@ -297,21 +297,31 @@ export function attachResize(
       function onMove(e) {
         const dx = (e.clientX - startMX) / viewport.zoom;
         const dy = (e.clientY - startMY) / viewport.zoom;
+        const symmetric = e.altKey;
+        const m = symmetric ? 2 : 1;
+        const cx = startX + startW / 2;
+        const cy = startY + startH / 2;
 
         if (dir.includes("e")) {
-          tile.width = Math.max(min.width, startW + dx);
+          tile.width = Math.max(min.width, startW + dx * m);
+          if (symmetric) tile.x = cx - tile.width / 2;
         }
         if (dir.includes("w")) {
-          const newW = Math.max(min.width, startW - dx);
-          tile.x = startX + (startW - newW);
+          const newW = Math.max(min.width, startW - dx * m);
+          tile.x = symmetric
+            ? cx - newW / 2
+            : startX + (startW - newW);
           tile.width = newW;
         }
         if (dir.includes("s")) {
-          tile.height = Math.max(min.height, startH + dy);
+          tile.height = Math.max(min.height, startH + dy * m);
+          if (symmetric) tile.y = cy - tile.height / 2;
         }
         if (dir.includes("n")) {
-          const newH = Math.max(min.height, startH - dy);
-          tile.y = startY + (startH - newH);
+          const newH = Math.max(min.height, startH - dy * m);
+          tile.y = symmetric
+            ? cy - newH / 2
+            : startY + (startH - newH);
           tile.height = newH;
         }
 
