@@ -316,7 +316,7 @@ const TERMINAL_MODES: {
   {
     value: "tmux",
     label: "tmux",
-    description: "May cause scrollback artifacts. Claude Code agent teams run in individual tmux panes.",
+    description: "May cause scrollback artifacts.",
     deprecated: true,
   },
 ];
