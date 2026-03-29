@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { TerminalTab } from "@collab/components/Terminal";
-import { displayBasename } from "@collab/shared/path-utils";
+import { normalizeCommandName } from "@collab/shared/path-utils";
 import "./styles/App.css";
 
 function estimateTermSize(): { cols: number; rows: number } {
@@ -17,7 +17,6 @@ function estimateTermSize(): { cols: number; rows: number } {
 interface Session {
   id: string;
   title: string;
-  displayName: string;
   commandName: string;
   target: string;
 }
@@ -29,10 +28,40 @@ function buildCdCommand(path: string, target: string): string {
   return `cd '${path.replace(/'/g, "'\\''")}'`;
 }
 
+const IS_MAC = window.api.getPlatform() === "darwin";
+
+function waitForSessionReady(sessionId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onData = (p: {
+      sessionId: string;
+      data: string;
+    }) => {
+      if (p.sessionId === sessionId) {
+        cleanup();
+        resolve(true);
+      }
+    };
+    const onExit = (p: {
+      sessionId: string;
+      exitCode: number;
+    }) => {
+      if (p.sessionId === sessionId) {
+        cleanup();
+        resolve(false);
+      }
+    };
+    const cleanup = () => {
+      window.api.offPtyData(onData);
+      window.api.offPtyExit(onExit);
+    };
+    window.api.onPtyData(onData);
+    window.api.onPtyExit(onExit);
+  });
+}
+
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const activeIdRef = useRef(activeId);
@@ -44,12 +73,10 @@ function App() {
       config?.workspaces?.[config?.active_workspace] || undefined;
     const { cols, rows } = estimateTermSize();
     const result = await window.api.ptyCreate(cwd, cols, rows);
-    const commandName = displayBasename(result.command || result.shell) || "shell";
     const session: Session = {
       id: result.sessionId,
       title: result.displayName,
-      displayName: result.displayName,
-      commandName,
+      commandName: normalizeCommandName(result.command || result.shell) || "shell",
       target: result.target,
     };
     setSessions((prev) => [...prev, session]);
@@ -72,6 +99,12 @@ function App() {
     },
     [activeId],
   );
+
+  const createReadyTab = useCallback(async (): Promise<Session | null> => {
+    const session = await createTab();
+    const ready = await waitForSessionReady(session.id);
+    return ready ? session : null;
+  }, [createTab]);
 
   useEffect(() => {
     const handleExit = (payload: {
@@ -105,24 +138,17 @@ function App() {
 
     if (!pendingTab.current) {
       pendingTab.current = (async () => {
-        const session = await createTab();
-        await new Promise<void>((resolve) => {
-          const onData = (p: {
-            sessionId: string;
-            data: string;
-          }) => {
-            if (p.sessionId === session.id) {
-              window.api.offPtyData(onData);
-              resolve();
-            }
-          };
-          window.api.onPtyData(onData);
-        });
+        const session = await createReadyTab();
+        if (!session) {
+          throw new Error("Terminal session exited before becoming ready");
+        }
         return session;
-      })();
+      })().finally(() => {
+        pendingTab.current = null;
+      });
     }
     return pendingTab.current;
-  }, [createTab]);
+  }, [createReadyTab]);
 
   useEffect(() => {
     if (activeId) pendingTab.current = null;
@@ -133,15 +159,11 @@ function App() {
     if (didInit.current) return;
     didInit.current = true;
     ensureTab();
-    window.api.getConfig().then((cfg) => {
-      const wp = cfg?.workspaces?.[cfg?.active_workspace];
-      if (wp) setWorkspacePath(wp);
-    });
   }, [ensureTab]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.metaKey) return;
+      if (!(IS_MAC ? e.metaKey : e.ctrlKey)) return;
 
       if (e.key === "t") {
         e.preventDefault();
@@ -174,14 +196,18 @@ function App() {
       if (cdBusy.current) return;
       cdBusy.current = true;
       try {
-        const session = await ensureTab();
+        let session = await ensureTab();
 
         const fg = await window.api.ptyForegroundProcess(session.id);
-        const isShellIdle =
-          fg === session.commandName || fg === session.displayName;
+        const isShellIdle = normalizeCommandName(fg) === session.commandName;
+        if (!isShellIdle) {
+          const nextSession = await createReadyTab();
+          if (!nextSession) return;
+          session = nextSession;
+        }
         const cmd = buildCdCommand(path, session.target);
 
-        const text = isShellIdle ? `${cmd}\r` : `!${cmd}\r`;
+        const text = `${cmd}\r`;
         for (const ch of text) {
           window.api.ptyWrite(session.id, ch);
           await new Promise((r) => setTimeout(r, 5));
@@ -201,40 +227,10 @@ function App() {
       if (now - lastRunMs.current < 50) return;
       lastRunMs.current = now;
 
-      const session = await createTab();
-
+      const session = await createReadyTab();
+      if (!session) return;
       const alive = () =>
         sessionsRef.current.some((s) => s.id === session.id);
-
-      // Wait for shell to be ready, abort if tab is closed
-      const ready = await new Promise<boolean>((resolve) => {
-        const onData = (p: {
-          sessionId: string;
-          data: string;
-        }) => {
-          if (p.sessionId === session.id) {
-            cleanup();
-            resolve(true);
-          }
-        };
-        const onExit = (p: {
-          sessionId: string;
-          exitCode: number;
-        }) => {
-          if (p.sessionId === session.id) {
-            cleanup();
-            resolve(false);
-          }
-        };
-        const cleanup = () => {
-          window.api.offPtyData(onData);
-          window.api.offPtyExit(onExit);
-        };
-        window.api.onPtyData(onData);
-        window.api.onPtyExit(onExit);
-      });
-
-      if (!ready) return;
 
       // Type command as-is, aborting if tab is closed mid-type
       const fullCmd = `${command}\r`;
@@ -244,7 +240,7 @@ function App() {
         await new Promise((r) => setTimeout(r, 5));
       }
     },
-    [createTab],
+    [createReadyTab],
   );
 
   useEffect(() => {

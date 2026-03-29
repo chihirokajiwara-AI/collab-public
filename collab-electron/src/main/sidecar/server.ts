@@ -3,7 +3,7 @@ import * as net from "node:net";
 import * as fs from "node:fs";
 import * as crypto from "node:crypto";
 import * as pty from "node-pty";
-import { displayBasename } from "@collab/shared/path-utils";
+import { displayCommandName } from "@collab/shared/path-utils";
 import { cleanupEndpoint, prepareEndpoint } from "../ipc-endpoint";
 import { RingBuffer } from "./ring-buffer";
 import {
@@ -506,9 +506,9 @@ export class SidecarServer {
 
   private getForegroundCommand(session: Session): string {
     if (process.platform === "win32") {
-      if (session.target.startsWith("wsl:")) {
-        return session.displayName;
-      }
+      const fallback = session.target.startsWith("wsl:")
+        ? session.displayName
+        : displayCommandName(session.shell);
       try {
         const { execFileSync } = require("node:child_process");
         const output = execFileSync(
@@ -525,11 +525,9 @@ export class SidecarServer {
           ],
           { encoding: "utf8", timeout: 2000, windowsHide: true },
         ).trim();
-        return output
-          ? displayBasename(output.replace(/\.exe$/i, ""))
-          : session.displayName;
+        return output ? displayCommandName(output) : fallback;
       } catch {
-        return session.displayName;
+        return fallback;
       }
     }
 
@@ -542,7 +540,7 @@ export class SidecarServer {
     const lines = out.split("\n").filter(Boolean);
     const last = lines[lines.length - 1]?.trim();
     return last
-      ? last.replace(/^\d+\s+/, "")
+      ? displayCommandName(last.replace(/^\d+\s+/, ""))
       : session.displayName;
   }
 }

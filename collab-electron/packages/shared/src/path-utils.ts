@@ -117,6 +117,18 @@ export function displayBasename(value: string): string {
   return splitDisplayPath(value).name || value;
 }
 
+export function displayCommandName(value: string): string {
+  return displayBasename(value).replace(/\.exe$/i, "");
+}
+
+export function normalizeCommandName(
+  value: string | null | undefined,
+): string | null {
+  const input = value?.trim();
+  if (!input) return null;
+  return displayCommandName(input).toLowerCase();
+}
+
 export function splitPathSegments(value: string): string[] {
   return splitSegments(value);
 }

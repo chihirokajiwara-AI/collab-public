@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   displayBasename,
+  displayCommandName,
   isSubpath,
   joinPath,
+  normalizeCommandName,
   parentPath,
   parseWslUncPath,
   pathKind,
@@ -44,5 +46,11 @@ describe("path-utils", () => {
     expect(joinPath("C:\\repo", "src")).toBe("C:\\repo\\src");
     expect(parentPath("C:\\repo\\src\\index.ts")).toBe("C:\\repo\\src");
     expect(displayBasename("/tmp/work/file.ts")).toBe("file.ts");
+  });
+
+  test("normalizes executable command names for comparison", () => {
+    expect(displayCommandName("C:\\Program Files\\PowerShell\\7\\pwsh.exe")).toBe("pwsh");
+    expect(normalizeCommandName("PowerShell.EXE")).toBe("powershell");
+    expect(normalizeCommandName("/bin/bash")).toBe("bash");
   });
 });
