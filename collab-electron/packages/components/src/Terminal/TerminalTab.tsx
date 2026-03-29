@@ -105,6 +105,13 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			return true;
 		};
 
+		let suppressPasteEvent = false;
+
+		const pasteFromShortcut = () => {
+			suppressPasteEvent = true;
+			void pasteClipboardText();
+		};
+
 		const pasteClipboardText = async () => {
 			try {
 				const text = await navigator.clipboard.readText();
@@ -130,8 +137,17 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 					return false;
 				}
 				if (key === "v") {
-					void pasteClipboardText();
+					pasteFromShortcut();
 					return false;
+				}
+				if (!IS_MAC && e.shiftKey) {
+					if (key === "c" && copySelectionToClipboard()) {
+						return false;
+					}
+					if (key === "v") {
+						pasteFromShortcut();
+						return false;
+					}
 				}
 			}
 			if (e.type === "keydown" && e.shiftKey && e.key === "Insert") {
@@ -202,6 +218,11 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 		};
 
 		const handlePaste = (event: ClipboardEvent) => {
+			if (suppressPasteEvent) {
+				suppressPasteEvent = false;
+				event.preventDefault();
+				return;
+			}
 			const text = event.clipboardData?.getData("text/plain");
 			if (!text) return;
 			window.api.ptyWrite(sessionId, text);
