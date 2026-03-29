@@ -12,6 +12,7 @@ import "./TerminalTab.css";
 // call, preventing partial-render artifacts from the renderer
 // processing many small sequential writes.
 const DATA_BUFFER_FLUSH_MS = 5;
+const IS_MAC = window.api.getPlatform() === "darwin";
 
 interface TerminalTabProps {
 	sessionId: string;
@@ -26,7 +27,8 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 	const fitRef = useRef<FitAddon | null>(null);
 
 	useEffect(() => {
-		if (!containerRef.current) return;
+		const container = containerRef.current;
+		if (!container) return;
 
 		const term = new Terminal({
 			theme: getTheme(),
@@ -41,7 +43,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 
 		const fit = new FitAddon();
 		term.loadAddon(fit);
-		term.open(containerRef.current);
+		term.open(container);
 		fitRef.current = fit;
 
 		const unicode11 = new Unicode11Addon();
@@ -96,11 +98,44 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 		// tmux's input parser which strips modifier info in legacy mode.
 		// Block both keydown AND keypress to prevent xterm from also
 		// sending \r through the normal onData path.
+		const copySelectionToClipboard = () => {
+			const selection = term.getSelection();
+			if (!selection) return false;
+			void navigator.clipboard.writeText(selection).catch(() => {});
+			return true;
+		};
+
+		const pasteClipboardText = async () => {
+			try {
+				const text = await navigator.clipboard.readText();
+				if (text) {
+					window.api.ptyWrite(sessionId, text);
+				}
+			} catch {
+				// Clipboard access can fail outside a user gesture.
+			}
+		};
+
 		term.attachCustomKeyEventHandler((e) => {
 			if (e.key === "Enter" && e.shiftKey) {
 				if (e.type === "keydown") {
 					window.api.ptySendRawKeys(sessionId, "\x1b[13;2u");
 				}
+				return false;
+			}
+			const primaryModifier = IS_MAC ? e.metaKey : e.ctrlKey;
+			if (e.type === "keydown" && primaryModifier) {
+				const key = e.key.toLowerCase();
+				if (key === "c" && copySelectionToClipboard()) {
+					return false;
+				}
+				if (key === "v") {
+					void pasteClipboardText();
+					return false;
+				}
+			}
+			if (e.type === "keydown" && e.shiftKey && e.key === "Insert") {
+				void pasteClipboardText();
 				return false;
 			}
 			if (e.type === "keydown" && e.metaKey) {
@@ -159,6 +194,23 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			window.api.ptyResize(sessionId, cols, rows);
 		});
 
+		const handleCopy = (event: ClipboardEvent) => {
+			const selection = term.getSelection();
+			if (!selection) return;
+			event.clipboardData?.setData("text/plain", selection);
+			event.preventDefault();
+		};
+
+		const handlePaste = (event: ClipboardEvent) => {
+			const text = event.clipboardData?.getData("text/plain");
+			if (!text) return;
+			window.api.ptyWrite(sessionId, text);
+			event.preventDefault();
+		};
+
+		container.addEventListener("copy", handleCopy);
+		container.addEventListener("paste", handlePaste);
+
 		const offShellBlur = window.api.onShellBlur(() => {
 			term.blur();
 			const active = document.activeElement as HTMLElement | null;
@@ -193,6 +245,8 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			window.removeEventListener("focus", onWindowFocus);
 			mediaQuery.removeEventListener("change", onThemeChange);
 			resizeObserver.disconnect();
+			container.removeEventListener("copy", handleCopy);
+			container.removeEventListener("paste", handlePaste);
 			window.api.offPtyData(handleData);
 			offShellBlur();
 			term.dispose();
