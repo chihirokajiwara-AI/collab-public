@@ -240,6 +240,15 @@ function isBrowserTileWebview(wc: WebContents): boolean {
   }
 }
 
+/** Internal webviews (terminal, viewer, graph) use the default session (no partition). */
+function isInternalWebview(wc: WebContents): boolean {
+  try {
+    return wc.session === session.defaultSession;
+  } catch {
+    return false;
+  }
+}
+
 function attachBrowserShortcuts(
   wc: WebContents,
   hostWindow: BrowserWindow,
@@ -282,12 +291,15 @@ function registerToggleShortcuts(win: BrowserWindow): void {
 
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
-      attachShortcutListener(wc);
+      // Skip terminal/viewer/graph webviews — they must receive raw key
+      // events (arrow keys, ESC sequences) without any interception.
+      if (!isInternalWebview(wc)) {
+        attachShortcutListener(wc);
+        wc.setZoomLevel(0);
+      }
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
       }
-      // Lock webview zoom — only nav webview zoom is changed explicitly by the renderer
-      wc.setZoomLevel(0);
     });
   });
 }
