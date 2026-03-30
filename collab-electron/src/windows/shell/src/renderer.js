@@ -675,16 +675,22 @@ async function init() {
 	canvasEl.addEventListener("drop", (e) => {
 		e.preventDefault();
 		dragRefCount = 0;
+
+		// Hit-test BEFORE restoring pointer-events — webviews must still
+		// be transparent so elementFromPoint reaches the .canvas-tile div.
+		const files = e.dataTransfer?.files;
+		let target = null;
+		if (files && files.length > 0) {
+			target = document.elementFromPoint(e.clientX, e.clientY);
+		}
+
+		// Now restore pointer-events
 		for (const h of getAllWebviews()) {
 			h.webview.style.pointerEvents = "";
 		}
 
-		const files = e.dataTransfer?.files;
-		if (!files || files.length === 0) return;
+		if (!files || files.length === 0 || !target) return;
 
-		// Find which terminal tile is under the cursor
-		const target = document.elementFromPoint(e.clientX, e.clientY);
-		if (!target) return;
 		const tileEl = target.closest(".canvas-tile");
 		if (!tileEl || tileEl.dataset.tileType !== "term") return;
 		const tileId = tileEl.dataset.tileId;
