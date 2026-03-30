@@ -219,6 +219,12 @@ function attachShortcutListener(target: WebContents): void {
     if (toggle && toggle.modifier(input)) {
       event.preventDefault();
       if (!input.isAutoRepeat) sendShortcut(toggle.action);
+      return;
+    }
+
+    // Block Chromium's built-in page zoom — handled per-panel via menu shortcuts
+    if (cmdOrCtrl(input) && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "0")) {
+      event.preventDefault();
     }
   });
 }
