@@ -159,7 +159,10 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			const primaryModifier = IS_MAC ? e.metaKey : e.ctrlKey;
 			// Search: Cmd+F to toggle search bar
 			if (e.type === "keydown" && primaryModifier && e.key === "f") {
-				setSearchVisible((prev) => !prev);
+				setSearchVisible((prev) => {
+					if (prev) searchAddonRef.current?.clearDecorations();
+					return !prev;
+				});
 				return false;
 			}
 			if (e.type === "keydown" && primaryModifier) {
