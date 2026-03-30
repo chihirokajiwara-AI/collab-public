@@ -90,7 +90,7 @@ if (savedTheme === "light" || savedTheme === "dark") {
 } else {
   nativeTheme.themeSource = "system";
 }
-let globalZoomLevel = 0;
+// Per-panel zoom is managed by the renderer; no global zoom level needed.
 
 if (!app.isPackaged) {
   // Vite dev uses a relaxed renderer policy for HMR; suppress Electron's
@@ -266,25 +266,27 @@ function attachBrowserShortcuts(
 function registerToggleShortcuts(win: BrowserWindow): void {
   attachShortcutListener(win.webContents);
 
+  // Block Chromium's built-in page zoom on the SHELL window only.
+  // Child webviews (terminal, nav, etc.) are NOT touched — terminal
+  // webviews handle Cmd+=/- via xterm's font zoom internally.
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    if (cmdOrCtrl(input) && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "0")) {
+      event.preventDefault();
+    }
+  });
+
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
       attachShortcutListener(wc);
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
       }
-      if (globalZoomLevel !== 0) {
-        wc.setZoomLevel(globalZoomLevel);
-      }
     });
   });
 }
 
-function applyZoomToAll(level: number): void {
-  globalZoomLevel = level;
-  for (const wc of webContentsModule.getAllWebContents()) {
-    if (!wc.isDestroyed()) wc.setZoomLevel(level);
-  }
-}
+
 
 function buildAppMenu(): void {
   const isMac = process.platform === "darwin";
@@ -378,17 +380,17 @@ function buildAppMenu(): void {
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+=",
-          click: () => applyZoomToAll(globalZoomLevel + 0.25),
+          click: () => sendShortcut("zoom-in"),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
-          click: () => applyZoomToAll(globalZoomLevel - 0.25),
+          click: () => sendShortcut("zoom-out"),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
-          click: () => applyZoomToAll(0),
+          click: () => sendShortcut("zoom-reset"),
         },
         { type: "separator" },
         { role: "toggleDevTools" },

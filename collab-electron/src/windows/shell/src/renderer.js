@@ -897,7 +897,9 @@ async function init() {
 				noteSurfaceFocus("canvas");
 			}
 		} else if (action === "zoom-in" || action === "zoom-out" || action === "zoom-reset") {
-			const isCanvas = activeSurface === "canvas" || activeSurface === "canvas-tile";
+			// canvas-tile = terminal focused → xterm handles font zoom internally, skip
+			if (activeSurface === "canvas-tile") return;
+			const isCanvas = activeSurface === "canvas";
 			if (isCanvas) {
 				// Zoom the canvas viewport around its center
 				const rect = canvasEl.getBoundingClientRect();
