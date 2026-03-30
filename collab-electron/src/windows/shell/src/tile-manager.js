@@ -235,6 +235,39 @@ export function createTileManager({
 				}
 			}
 		});
+
+		// Drag-and-drop: Finder files → insert shell-escaped paths into terminal.
+		// The webview itself cannot receive drop events from the OS, so we
+		// attach handlers on the parent contentArea element instead.
+		dom.contentArea.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			dom.contentArea.style.outline = "2px solid #4a9eff";
+			dom.contentArea.style.outlineOffset = "-2px";
+		});
+		dom.contentArea.addEventListener("dragleave", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			dom.contentArea.style.outline = "";
+			dom.contentArea.style.outlineOffset = "";
+		});
+		dom.contentArea.addEventListener("drop", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			dom.contentArea.style.outline = "";
+			dom.contentArea.style.outlineOffset = "";
+			const files = e.dataTransfer?.files;
+			if (files && files.length > 0 && tile.ptySessionId) {
+				const paths = [];
+				for (let i = 0; i < files.length; i++) {
+					const p = files[i].path;
+					if (p) paths.push("'" + p.replace(/'/g, "'\\''") + "'");
+				}
+				if (paths.length > 0) {
+					window.shellApi.ptyWrite?.(tile.ptySessionId, paths.join(" "));
+				}
+			}
+		});
 	}
 
 	function spawnGraphWebview(tile) {
