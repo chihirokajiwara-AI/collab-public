@@ -222,9 +222,12 @@ function attachShortcutListener(target: WebContents): void {
       return;
     }
 
-    // Block Chromium's built-in page zoom — handled per-panel via menu shortcuts
+    // Intercept zoom keys: block Chromium's built-in page zoom and
+    // route through our per-panel handler instead of relying on menu accelerators
     if (cmdOrCtrl(input) && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "0")) {
       event.preventDefault();
+      const action = input.key === "0" ? "zoom-reset" : (input.key === "-" ? "zoom-out" : "zoom-in");
+      sendShortcut(action);
     }
   });
 }
@@ -273,13 +276,18 @@ function attachBrowserShortcuts(
 function registerToggleShortcuts(win: BrowserWindow): void {
   attachShortcutListener(win.webContents);
 
+  // Disable page-level zoom on the main window (per-panel zoom is in the renderer)
+  win.webContents.setZoomLevel(0);
+  win.webContents.setVisualZoomLevelLimits(1, 1);
+
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
       attachShortcutListener(wc);
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
       }
-      // Per-panel zoom is managed by the renderer; no global zoom applied here
+      // Lock webview zoom — only nav webview zoom is changed explicitly by the renderer
+      wc.setZoomLevel(0);
     });
   });
 }
@@ -377,16 +385,19 @@ function buildAppMenu(): void {
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+=",
+          registerAccelerator: false,
           click: () => sendShortcut("zoom-in"),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
+          registerAccelerator: false,
           click: () => sendShortcut("zoom-out"),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
+          registerAccelerator: false,
           click: () => sendShortcut("zoom-reset"),
         },
         { type: "separator" },
