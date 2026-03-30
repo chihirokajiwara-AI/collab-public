@@ -174,15 +174,6 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 					pasteFromShortcut();
 					return false;
 				}
-				if (!IS_MAC && e.shiftKey) {
-					if (key === "c" && copySelectionToClipboard()) {
-						return false;
-					}
-					if (key === "v") {
-						pasteFromShortcut();
-						return false;
-					}
-				}
 			}
 			if (e.type === "keydown" && e.shiftKey && e.key === "Insert") {
 				pasteFromShortcut();

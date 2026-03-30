@@ -133,28 +133,37 @@ async function init() {
 
 	// -- Drag-and-drop handler (shared with webviews) --
 
+	function disableWebviewPointerEvents() {
+		for (const h of getAllWebviews()) {
+			h.webview.style.pointerEvents = "none";
+		}
+	}
+
+	function restoreWebviewPointerEvents() {
+		for (const h of getAllWebviews()) {
+			h.webview.style.pointerEvents = "";
+		}
+	}
+
 	function handleDndMessage(channel) {
 		if (channel === "dnd:dragenter") {
 			dragCounter++;
 			if (dragCounter === 1 && dragDropOverlay) {
 				dragDropOverlay.classList.add("visible");
-				for (const h of getAllWebviews()) {
-					h.webview.style.pointerEvents = "none";
-				}
+				disableWebviewPointerEvents();
 			}
 		} else if (channel === "dnd:dragleave") {
 			dragCounter = Math.max(0, dragCounter - 1);
 			if (dragCounter === 0 && dragDropOverlay) {
 				dragDropOverlay.classList.remove("visible");
+				restoreWebviewPointerEvents();
 			}
 		} else if (channel === "dnd:drop") {
 			dragCounter = 0;
 			if (dragDropOverlay) {
 				dragDropOverlay.classList.remove("visible");
 			}
-			for (const h of getAllWebviews()) {
-				h.webview.style.pointerEvents = "";
-			}
+			restoreWebviewPointerEvents();
 		}
 	}
 
@@ -644,26 +653,20 @@ async function init() {
 	// -- Drag-and-drop: Finder files → terminal tiles --
 	// Webview elements swallow OS drag events, so we disable their
 	// pointer-events during a drag and handle the drop on the canvas.
-
-	let dragRefCount = 0;
+	// Uses the shared dragCounter + helpers from handleDndMessage above.
 
 	canvasEl.addEventListener("dragenter", (e) => {
 		e.preventDefault();
-		dragRefCount++;
-		if (dragRefCount === 1) {
-			for (const h of getAllWebviews()) {
-				h.webview.style.pointerEvents = "none";
-			}
+		dragCounter++;
+		if (dragCounter === 1) {
+			disableWebviewPointerEvents();
 		}
 	});
 
 	canvasEl.addEventListener("dragleave", () => {
-		dragRefCount--;
-		if (dragRefCount <= 0) {
-			dragRefCount = 0;
-			for (const h of getAllWebviews()) {
-				h.webview.style.pointerEvents = "";
-			}
+		dragCounter = Math.max(0, dragCounter - 1);
+		if (dragCounter === 0) {
+			restoreWebviewPointerEvents();
 		}
 	});
 
@@ -674,7 +677,6 @@ async function init() {
 
 	canvasEl.addEventListener("drop", (e) => {
 		e.preventDefault();
-		dragRefCount = 0;
 
 		// Hit-test BEFORE restoring pointer-events — webviews must still
 		// be transparent so elementFromPoint reaches the .canvas-tile div.
@@ -684,10 +686,8 @@ async function init() {
 			target = document.elementFromPoint(e.clientX, e.clientY);
 		}
 
-		// Now restore pointer-events
-		for (const h of getAllWebviews()) {
-			h.webview.style.pointerEvents = "";
-		}
+		dragCounter = 0;
+		restoreWebviewPointerEvents();
 
 		if (!files || files.length === 0 || !target) return;
 
