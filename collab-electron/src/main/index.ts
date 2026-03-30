@@ -14,7 +14,6 @@ import {
   type WebContents,
 } from "electron";
 import { execFileSync } from "node:child_process";
-import { setupWebviewSecurity, setupPermissionHandler } from "./security";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -91,7 +90,7 @@ if (savedTheme === "light" || savedTheme === "dark") {
 } else {
   nativeTheme.themeSource = "system";
 }
-// Zoom is now handled per-panel in the renderer (canvas viewport vs nav webview)
+let globalZoomLevel = 0;
 
 if (!app.isPackaged) {
   // Vite dev uses a relaxed renderer policy for HMR; suppress Electron's
@@ -219,15 +218,6 @@ function attachShortcutListener(target: WebContents): void {
     if (toggle && toggle.modifier(input)) {
       event.preventDefault();
       if (!input.isAutoRepeat) sendShortcut(toggle.action);
-      return;
-    }
-
-    // Intercept zoom keys: block Chromium's built-in page zoom and
-    // route through our per-panel handler instead of relying on menu accelerators
-    if (cmdOrCtrl(input) && (input.key === "=" || input.key === "+" || input.key === "-" || input.key === "0")) {
-      event.preventDefault();
-      const action = input.key === "0" ? "zoom-reset" : (input.key === "-" ? "zoom-out" : "zoom-in");
-      sendShortcut(action);
     }
   });
 }
@@ -235,15 +225,6 @@ function attachShortcutListener(target: WebContents): void {
 function isBrowserTileWebview(wc: WebContents): boolean {
   try {
     return wc.session === session.fromPartition("persist:browser");
-  } catch {
-    return false;
-  }
-}
-
-/** Internal webviews (terminal, viewer, graph) use the default session (no partition). */
-function isInternalWebview(wc: WebContents): boolean {
-  try {
-    return wc.session === session.defaultSession;
   } catch {
     return false;
   }
@@ -285,25 +266,25 @@ function attachBrowserShortcuts(
 function registerToggleShortcuts(win: BrowserWindow): void {
   attachShortcutListener(win.webContents);
 
-  // Disable page-level zoom on the main window (per-panel zoom is in the renderer)
-  win.webContents.setZoomLevel(0);
-  win.webContents.setVisualZoomLevelLimits(1, 1);
-
   win.webContents.on("did-attach-webview", (_event, wc) => {
     wc.once("did-finish-load", () => {
-      // Skip terminal/viewer/graph webviews — they must receive raw key
-      // events (arrow keys, ESC sequences) without any interception.
-      if (!isInternalWebview(wc)) {
-        attachShortcutListener(wc);
-        wc.setZoomLevel(0);
-      }
+      attachShortcutListener(wc);
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
+      }
+      if (globalZoomLevel !== 0) {
+        wc.setZoomLevel(globalZoomLevel);
       }
     });
   });
 }
 
+function applyZoomToAll(level: number): void {
+  globalZoomLevel = level;
+  for (const wc of webContentsModule.getAllWebContents()) {
+    if (!wc.isDestroyed()) wc.setZoomLevel(level);
+  }
+}
 
 function buildAppMenu(): void {
   const isMac = process.platform === "darwin";
@@ -397,20 +378,17 @@ function buildAppMenu(): void {
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+=",
-          registerAccelerator: false,
-          click: () => sendShortcut("zoom-in"),
+          click: () => applyZoomToAll(globalZoomLevel + 0.25),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
-          registerAccelerator: false,
-          click: () => sendShortcut("zoom-out"),
+          click: () => applyZoomToAll(globalZoomLevel - 0.25),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
-          registerAccelerator: false,
-          click: () => sendShortcut("zoom-reset"),
+          click: () => applyZoomToAll(0),
         },
         { type: "separator" },
         { role: "toggleDevTools" },
@@ -803,8 +781,6 @@ app.whenReady().then(async () => {
 
   buildAppMenu();
   createWindow();
-  setupWebviewSecurity(mainWindow!.webContents);
-  setupPermissionHandler(mainWindow!.webContents.session);
   registerToggleShortcuts(mainWindow!);
 
   initMainAnalytics();
