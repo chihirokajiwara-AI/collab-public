@@ -27,6 +27,9 @@ interface TerminalTabProps {
 function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: TerminalTabProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fitRef = useRef<FitAddon | null>(null);
+	const [searchVisible, setSearchVisible] = useState(false);
+	const searchInputRef = useRef<HTMLInputElement>(null);
+	const searchAddonRef = useRef<SearchAddon | null>(null);
 
 	useEffect(() => {
 		const container = containerRef.current;
@@ -65,6 +68,10 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 		} catch {
 			// DOM renderer fallback — no action needed
 		}
+
+		const searchAddon = new SearchAddon();
+		term.loadAddon(searchAddon);
+		searchAddonRef.current = searchAddon;
 
 		// Clickable URL detection
 		const webLinks = new WebLinksAddon((event, uri) => {
@@ -150,6 +157,11 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 				return false;
 			}
 			const primaryModifier = IS_MAC ? e.metaKey : e.ctrlKey;
+			// Search: Cmd+F to toggle search bar
+			if (e.type === "keydown" && primaryModifier && e.key === "f") {
+				setSearchVisible((prev) => !prev);
+				return false;
+			}
 			if (e.type === "keydown" && primaryModifier) {
 				const key = e.key.toLowerCase();
 				if (key === "c" && copySelectionToClipboard()) {
@@ -335,6 +347,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			offShellBlur();
 			term.dispose();
 			fitRef.current = null;
+			searchAddonRef.current = null;
 		};
 	}, [sessionId]);
 
@@ -345,11 +358,51 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 	}, [visible]);
 
 	return (
-		<div
-			ref={containerRef}
-			className="terminal-tab"
-			style={{ display: visible ? "block" : "none" }}
-		/>
+		<div style={{ display: visible ? "flex" : "none", flexDirection: "column", width: "100%", height: "100%" }}>
+			{searchVisible && (
+				<div className="terminal-search-bar">
+					<input
+						ref={searchInputRef}
+						type="text"
+						className="terminal-search-input"
+						placeholder="Find..."
+						autoFocus
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								if (e.shiftKey) {
+									searchAddonRef.current?.findPrevious(e.currentTarget.value);
+								} else {
+									searchAddonRef.current?.findNext(e.currentTarget.value);
+								}
+							}
+							if (e.key === "Escape") {
+								e.preventDefault();
+								searchAddonRef.current?.clearDecorations();
+								setSearchVisible(false);
+							}
+						}}
+						onChange={(e) => {
+							searchAddonRef.current?.findNext(e.target.value);
+						}}
+					/>
+					<button
+						className="terminal-search-close"
+						onClick={() => {
+							searchAddonRef.current?.clearDecorations();
+							setSearchVisible(false);
+						}}
+					>
+						×
+					</button>
+				</div>
+			)}
+			<div
+				ref={containerRef}
+				className="terminal-tab"
+				style={{ flex: 1 }}
+			/>
+		</div>
 	);
 }
 
