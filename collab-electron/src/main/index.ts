@@ -91,7 +91,7 @@ if (savedTheme === "light" || savedTheme === "dark") {
 } else {
   nativeTheme.themeSource = "system";
 }
-let globalZoomLevel = 0;
+// Zoom is now handled per-panel in the renderer (canvas viewport vs nav webview)
 
 if (!app.isPackaged) {
   // Vite dev uses a relaxed renderer policy for HMR; suppress Electron's
@@ -273,19 +273,11 @@ function registerToggleShortcuts(win: BrowserWindow): void {
       if (isBrowserTileWebview(wc)) {
         attachBrowserShortcuts(wc, win);
       }
-      if (globalZoomLevel !== 0) {
-        wc.setZoomLevel(globalZoomLevel);
-      }
+      // Per-panel zoom is managed by the renderer; no global zoom applied here
     });
   });
 }
 
-function applyZoomToAll(level: number): void {
-  globalZoomLevel = level;
-  for (const wc of webContentsModule.getAllWebContents()) {
-    if (!wc.isDestroyed()) wc.setZoomLevel(level);
-  }
-}
 
 function buildAppMenu(): void {
   const isMac = process.platform === "darwin";
@@ -379,17 +371,17 @@ function buildAppMenu(): void {
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+=",
-          click: () => applyZoomToAll(globalZoomLevel + 0.25),
+          click: () => sendShortcut("zoom-in"),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
-          click: () => applyZoomToAll(globalZoomLevel - 0.25),
+          click: () => sendShortcut("zoom-out"),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
-          click: () => applyZoomToAll(0),
+          click: () => sendShortcut("zoom-reset"),
         },
         { type: "separator" },
         { role: "toggleDevTools" },

@@ -830,6 +830,33 @@ async function init() {
 				canvasEl.focus();
 				noteSurfaceFocus("canvas");
 			}
+		} else if (action === "zoom-in" || action === "zoom-out" || action === "zoom-reset") {
+			const isCanvas = activeSurface === "canvas" || activeSurface === "canvas-tile";
+			if (isCanvas) {
+				// Zoom the canvas viewport around its center
+				const rect = canvasEl.getBoundingClientRect();
+				const fx = rect.width / 2;
+				const fy = rect.height / 2;
+				if (action === "zoom-reset") {
+					viewportState.zoom = 1;
+					viewport.updateCanvas();
+				} else {
+					const delta = action === "zoom-in" ? -100 : 100;
+					viewport.applyZoom(delta, fx, fy);
+				}
+			} else {
+				// Zoom the nav webview
+				const ws = workspaceManager.getActiveWorkspace();
+				if (ws && ws.nav && ws.nav.webview) {
+					const wv = ws.nav.webview;
+					if (action === "zoom-reset") {
+						wv.setZoomLevel(0);
+					} else {
+						const cur = wv.getZoomLevel();
+						wv.setZoomLevel(cur + (action === "zoom-in" ? 0.25 : -0.25));
+					}
+				}
+			}
 		}
 	}
 
@@ -1328,14 +1355,6 @@ async function init() {
 		}
 	}
 	window.shellApi.ptyCleanDetached?.(activeSessionIds);
-
-	// -- Initialize workspaces --
-
-	const { workspaces: wsPaths, active } = workspaceData;
-
-	for (const path of wsPaths) {
-		workspaceManager.addWorkspace(path);
-	}
 
 	if (workspaceManager.getWorkspaces().length === 0) {
 		workspaceManager.showEmptyState();
