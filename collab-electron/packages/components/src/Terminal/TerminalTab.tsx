@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 import { getTheme } from "./theme";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalTab.css";
@@ -37,6 +39,8 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			fontWeight: "300",
 			fontWeightBold: "500",
 			cursorBlink: true,
+			cursorStyle: "bar",
+			cursorWidth: 2,
 			scrollback: 200000,
 			allowProposedApi: true,
 		});
@@ -61,6 +65,21 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 		} catch {
 			// DOM renderer fallback — no action needed
 		}
+
+		// Clickable URL detection
+		const webLinks = new WebLinksAddon((event, uri) => {
+			// Only open on Cmd+click (Mac) or Ctrl+click (other)
+			if ((IS_MAC && event.metaKey) || (!IS_MAC && event.ctrlKey)) {
+				window.open(uri, "_blank");
+			}
+		});
+		term.loadAddon(webLinks);
+
+		// Visual bell: briefly flash the terminal on bell character
+		term.onBell(() => {
+			container.classList.add("terminal-bell-flash");
+			setTimeout(() => container.classList.remove("terminal-bell-flash"), 200);
+		});
 
 		// Delay initial fit: the webview may not have its final
 		// dimensions when the page first loads. Double-rAF ensures
@@ -235,6 +254,44 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 		container.addEventListener("copy", handleCopy, true);
 		container.addEventListener("paste", handlePaste, true);
 
+		// Drag-and-drop: insert file paths into terminal
+		const handleDragOver = (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			container.classList.add("terminal-drag-over");
+		};
+
+		const handleDragLeave = (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			container.classList.remove("terminal-drag-over");
+		};
+
+		const handleDrop = (e: DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			container.classList.remove("terminal-drag-over");
+			const files = e.dataTransfer?.files;
+			if (files && files.length > 0) {
+				const paths: string[] = [];
+				for (let i = 0; i < files.length; i++) {
+					// Electron File objects have a `path` property
+					const filePath = (files[i] as any).path;
+					if (filePath) {
+						// Shell-escape the path: wrap in single quotes, escape existing single quotes
+						paths.push("'" + filePath.replace(/'/g, "'\\''") + "'");
+					}
+				}
+				if (paths.length > 0) {
+					window.api.ptyWrite(sessionId, paths.join(" "));
+				}
+			}
+		};
+
+		container.addEventListener("dragover", handleDragOver);
+		container.addEventListener("dragleave", handleDragLeave);
+		container.addEventListener("drop", handleDrop);
+
 		const offShellBlur = window.api.onShellBlur(() => {
 			term.blur();
 			const active = document.activeElement as HTMLElement | null;
@@ -271,6 +328,9 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData, mode }: Ter
 			resizeObserver.disconnect();
 			container.removeEventListener("copy", handleCopy, true);
 			container.removeEventListener("paste", handlePaste, true);
+			container.removeEventListener("dragover", handleDragOver);
+			container.removeEventListener("dragleave", handleDragLeave);
+			container.removeEventListener("drop", handleDrop);
 			window.api.offPtyData(sessionId, handleData);
 			offShellBlur();
 			term.dispose();
