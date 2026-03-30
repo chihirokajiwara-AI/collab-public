@@ -641,6 +641,66 @@ async function init() {
 		getAllWebviews,
 	});
 
+	// -- Drag-and-drop: Finder files → terminal tiles --
+	// Webview elements swallow OS drag events, so we disable their
+	// pointer-events during a drag and handle the drop on the canvas.
+
+	let dragRefCount = 0;
+
+	canvasEl.addEventListener("dragenter", (e) => {
+		e.preventDefault();
+		dragRefCount++;
+		if (dragRefCount === 1) {
+			for (const h of getAllWebviews()) {
+				h.webview.style.pointerEvents = "none";
+			}
+		}
+	});
+
+	canvasEl.addEventListener("dragleave", () => {
+		dragRefCount--;
+		if (dragRefCount <= 0) {
+			dragRefCount = 0;
+			for (const h of getAllWebviews()) {
+				h.webview.style.pointerEvents = "";
+			}
+		}
+	});
+
+	canvasEl.addEventListener("dragover", (e) => {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+	});
+
+	canvasEl.addEventListener("drop", (e) => {
+		e.preventDefault();
+		dragRefCount = 0;
+		for (const h of getAllWebviews()) {
+			h.webview.style.pointerEvents = "";
+		}
+
+		const files = e.dataTransfer?.files;
+		if (!files || files.length === 0) return;
+
+		// Find which terminal tile is under the cursor
+		const target = document.elementFromPoint(e.clientX, e.clientY);
+		if (!target) return;
+		const tileEl = target.closest(".canvas-tile");
+		if (!tileEl || tileEl.dataset.tileType !== "term") return;
+		const tileId = tileEl.dataset.tileId;
+		const tile = getTile(tileId);
+		if (!tile?.ptySessionId) return;
+
+		const paths = [];
+		for (let i = 0; i < files.length; i++) {
+			const p = files[i].path;
+			if (p) paths.push("'" + p.replace(/'/g, "'\\''") + "'");
+		}
+		if (paths.length > 0) {
+			window.shellApi.ptyWrite?.(tile.ptySessionId, paths.join(" "));
+		}
+	});
+
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
