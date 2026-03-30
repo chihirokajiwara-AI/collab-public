@@ -650,63 +650,6 @@ async function init() {
 		getAllWebviews,
 	});
 
-	// -- Drag-and-drop: Finder files → terminal tiles --
-	// Webview elements swallow OS drag events, so we disable their
-	// pointer-events during a drag and handle the drop on the canvas.
-	// Uses the shared dragCounter + helpers from handleDndMessage above.
-
-	canvasEl.addEventListener("dragenter", (e) => {
-		e.preventDefault();
-		dragCounter++;
-		if (dragCounter === 1) {
-			disableWebviewPointerEvents();
-		}
-	});
-
-	canvasEl.addEventListener("dragleave", () => {
-		dragCounter = Math.max(0, dragCounter - 1);
-		if (dragCounter === 0) {
-			restoreWebviewPointerEvents();
-		}
-	});
-
-	canvasEl.addEventListener("dragover", (e) => {
-		e.preventDefault();
-		if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-	});
-
-	canvasEl.addEventListener("drop", (e) => {
-		e.preventDefault();
-
-		// Hit-test BEFORE restoring pointer-events — webviews must still
-		// be transparent so elementFromPoint reaches the .canvas-tile div.
-		const files = e.dataTransfer?.files;
-		let target = null;
-		if (files && files.length > 0) {
-			target = document.elementFromPoint(e.clientX, e.clientY);
-		}
-
-		dragCounter = 0;
-		restoreWebviewPointerEvents();
-
-		if (!files || files.length === 0 || !target) return;
-
-		const tileEl = target.closest(".canvas-tile");
-		if (!tileEl || tileEl.dataset.tileType !== "term") return;
-		const tileId = tileEl.dataset.tileId;
-		const tile = getTile(tileId);
-		if (!tile?.ptySessionId) return;
-
-		const paths = [];
-		for (let i = 0; i < files.length; i++) {
-			const p = files[i].path;
-			if (p) paths.push("'" + p.replace(/'/g, "'\\''") + "'");
-		}
-		if (paths.length > 0) {
-			window.shellApi.ptyWrite?.(tile.ptySessionId, paths.join(" "));
-		}
-	});
-
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
@@ -1319,8 +1262,9 @@ async function init() {
 	window.addEventListener("dragenter", (e) => {
 		e.preventDefault();
 		dragCounter++;
-		if (dragCounter === 1 && dragDropOverlay) {
-			dragDropOverlay.classList.add("visible");
+		if (dragCounter === 1) {
+			if (dragDropOverlay) dragDropOverlay.classList.add("visible");
+			disableWebviewPointerEvents();
 		}
 	});
 
@@ -1331,8 +1275,9 @@ async function init() {
 	window.addEventListener("dragleave", (e) => {
 		e.preventDefault();
 		dragCounter = Math.max(0, dragCounter - 1);
-		if (dragCounter === 0 && dragDropOverlay) {
-			dragDropOverlay.classList.remove("visible");
+		if (dragCounter === 0) {
+			if (dragDropOverlay) dragDropOverlay.classList.remove("visible");
+			restoreWebviewPointerEvents();
 		}
 	});
 
@@ -1343,6 +1288,29 @@ async function init() {
 			dragDropOverlay.classList.remove("visible");
 		}
 
+		// Hit-test BEFORE restoring pointer-events so elementFromPoint
+		// reaches .canvas-tile instead of the webview on top.
+		const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+		restoreWebviewPointerEvents();
+
+		// If dropped on a terminal tile, insert shell-escaped file paths
+		const tileEl = dropTarget?.closest(".canvas-tile");
+		if (tileEl && tileEl.dataset.tileType === "term") {
+			const tile = getTile(tileEl.dataset.tileId);
+			if (tile?.ptySessionId && e.dataTransfer?.files?.length) {
+				const termPaths = [];
+				for (let i = 0; i < e.dataTransfer.files.length; i++) {
+					const p = e.dataTransfer.files[i].path;
+					if (p) termPaths.push("'" + p.replace(/'/g, "'\\''") + "'");
+				}
+				if (termPaths.length > 0) {
+					window.shellApi.ptyWrite?.(tile.ptySessionId, termPaths.join(" "));
+				}
+				return;
+			}
+		}
+
+		// Otherwise, create file tiles on the canvas
 		const rect = canvasEl.getBoundingClientRect();
 		const screenX = e.clientX - rect.left;
 		const screenY = e.clientY - rect.top;
