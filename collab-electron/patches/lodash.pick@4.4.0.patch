@@ -1,0 +1,17 @@
+diff --git a/index.js b/index.js
+index aeeb775f1b1b234f6a647305038b907d0d02360d..d48eae542bc722c61a71b9dd17d6099ef7b59721 100644
+--- a/index.js
++++ b/index.js
+@@ -171,8 +171,10 @@ function basePickBy(object, props, predicate) {
+       result = {};
+ 
+   while (++index < length) {
+-    var key = props[index],
+-        value = object[key];
++    var key = props[index];
++    // Guard against prototype pollution (GHSA-p6mc-m468-83gw)
++    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
++    var value = object[key];
+ 
+     if (predicate(value, key)) {
+       result[key] = value;
