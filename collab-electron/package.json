@@ -187,6 +187,7 @@
 		"tough-cookie": "4.1.4"
 	},
 	"patchedDependencies": {
-		"lodash.pick@4.4.0": "patches/lodash.pick@4.4.0.patch"
+		"lodash.pick@4.4.0": "patches/lodash.pick@4.4.0.patch",
+		"front-matter@4.0.2": "patches/front-matter@4.0.2.patch"
 	}
 }

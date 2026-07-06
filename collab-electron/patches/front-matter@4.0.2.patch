@@ -1,0 +1,29 @@
+diff --git a/node_modules/front-matter/.bun-tag-fa1420af75563a2b b/.bun-tag-fa1420af75563a2b
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/index.js b/index.js
+index d518f1df0974b361911ab5ed90857295ab834f0a..7e7de445894cff82b945d9c7f4aa75b82b493c4a 100644
+--- a/index.js
++++ b/index.js
+@@ -1,4 +1,10 @@
+ var parser = require('js-yaml')
++// js-yaml >= 4 removed the unsafe `load`/dropped `safeLoad` (its `load` is now
++// safe-by-default). The removed methods still exist as stubs that throw when
++// called, so we can't feature-detect by truthiness -- check the actual
++// installed major version instead (see GHSA-h67p-54hq-rp68 / GHSA-vmf3-w455-68vh
++// js-yaml overrides that can pin js-yaml to 4.x here).
++var jsYamlMajor = parseInt(String(require('js-yaml/package.json').version), 10)
+ var optionalByteOrderMark = '\\ufeff?'
+ var platform = typeof process !== 'undefined' ? process.platform : ''
+ var pattern = '^(' +
+@@ -59,7 +65,9 @@ function parse (string, allowUnsafe) {
+     }
+   }
+ 
+-  var loader = allowUnsafe ? parser.load : parser.safeLoad
++  // On js-yaml 4.x, `load` is safe by default and unsafe loading no longer
++  // exists, so always use `load`. On 3.x, keep the original safe/unsafe split.
++  var loader = jsYamlMajor >= 4 ? parser.load : (allowUnsafe ? parser.load : parser.safeLoad)
+   var yaml = match[match.length - 1].replace(/^\s+|\s+$/g, '')
+   var attributes = loader(yaml) || {}
+   var body = string.replace(match[0], '')
