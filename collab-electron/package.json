@@ -177,6 +177,12 @@
 		"qs": "6.15.2",
 		"tmp": "0.2.7",
 		"js-yaml": "4.3.0",
-		"tar": "7.5.19"
+		"tar": "7.5.19",
+		"@babel/core": "7.29.7",
+		"vite": "7.3.6",
+		"@opentelemetry/core": "2.9.0",
+		"nth-check": "2.1.1",
+		"uuid": "11.1.1",
+		"tough-cookie": "4.1.4"
 	}
 }
