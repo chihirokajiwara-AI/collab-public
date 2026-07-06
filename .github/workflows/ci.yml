@@ -51,6 +51,7 @@ jobs:
           src/main/file-filter.test.ts
           src/main/sidecar/ring-buffer.test.ts
           src/main/updater
+          src/windows/shell/src/panel-manager.test.ts
 
   build:
     runs-on: ubuntu-latest

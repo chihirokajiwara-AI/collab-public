@@ -154,6 +154,7 @@
 	"devDependencies": {
 		"@electron/notarize": "2.5.0",
 		"@electron/rebuild": "^4.0.3",
+		"@happy-dom/global-registrator": "^20.10.6",
 		"@octokit/rest": "22.0.1",
 		"@tailwindcss/vite": "4.2.0",
 		"@types/d3": "7.4.3",
