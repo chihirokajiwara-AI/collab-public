@@ -5,7 +5,15 @@
  * After modularization, update imports to use ./canvas-viewport.js.
  */
 import { describe, test, expect } from "bun:test";
-import { shouldZoom } from "./canvas-viewport.js";
+
+// canvas-viewport.js reads window.shellApi (Electron preload API) at module
+// top-level to compute isMac. happy-dom provides `window` but not app-specific
+// preload APIs, so stub it once before importing (this file is the only one
+// that reads window.shellApi.getPlatform — no other test in the tree touches
+// this key, so a one-time module-level stub is safe; see panel-manager.test.ts
+// for the per-test beforeEach variant used where callers rely on distinct values).
+(globalThis as any).window.shellApi = { getPlatform: () => "darwin" };
+const { shouldZoom } = await import("./canvas-viewport.js");
 
 // -- shouldZoom modifier key routing --
 
