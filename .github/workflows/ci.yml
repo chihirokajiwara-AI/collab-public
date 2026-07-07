@@ -52,6 +52,8 @@ jobs:
           src/main/sidecar/ring-buffer.test.ts
           src/main/updater
           src/windows/shell/src/panel-manager.test.ts
+          src/windows/shell/src/tile-renderer.test.ts
+          src/windows/shell/src/webview-factory.test.ts
 
   build:
     runs-on: ubuntu-latest
