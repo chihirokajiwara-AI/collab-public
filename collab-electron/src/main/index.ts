@@ -49,6 +49,7 @@ import { listTerminalTargets } from "./terminal-target";
 import { readSessionMeta } from "./tmux";
 import {
   isNavigationAllowed,
+  isWorkspaceTileStoragePath,
   setupPermissionHandler,
   setupWebviewSecurity,
 } from "./security";
@@ -229,7 +230,7 @@ function attachShortcutListener(target: WebContents): void {
 
 function isBrowserTileWebview(wc: WebContents): boolean {
   try {
-    return wc.session === session.fromPartition("persist:browser");
+    return isWorkspaceTileStoragePath(wc.session.storagePath);
   } catch {
     return false;
   }

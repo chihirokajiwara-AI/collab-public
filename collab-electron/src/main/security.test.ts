@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test";
 import type { Session, WebContents } from "electron";
 import {
   isNavigationAllowed,
+  isWorkspaceTileStoragePath,
   setupPermissionHandler,
   setupWebviewSecurity,
 } from "./security";
@@ -204,5 +205,48 @@ describe("setupWebviewSecurity", () => {
     const { contents, wasWindowOpenHandlerCalled } = makeMockWebContents();
     setupWebviewSecurity(contents);
     expect(wasWindowOpenHandlerCalled()).toBe(false);
+  });
+});
+
+// isWorkspaceTileStoragePath is index.ts's isBrowserTileWebview() substitute
+// for identifying browser-tile webContents via Session.storagePath (Session
+// has no public `.partition` property). Electron maps `persist:ws-<hash>` to
+// `<userData>/Partitions/ws-<hash>` — this must recognize that layout while
+// rejecting the persist:browser popup partition and session.defaultSession.
+describe("isWorkspaceTileStoragePath", () => {
+  test("returns true for a storagePath ending in /Partitions/ws-<hash>", () => {
+    expect(
+      isWorkspaceTileStoragePath(
+        "/Users/x/Library/Application Support/MyApp/Partitions/ws-abc123",
+      ),
+    ).toBe(true);
+  });
+
+  test("returns false for a storagePath ending in /Partitions/browser (the popup partition)", () => {
+    expect(
+      isWorkspaceTileStoragePath(
+        "/Users/x/Library/Application Support/MyApp/Partitions/browser",
+      ),
+    ).toBe(false);
+  });
+
+  test("returns false for null", () => {
+    expect(isWorkspaceTileStoragePath(null)).toBe(false);
+  });
+
+  test("returns false for a storagePath with no Partitions segment (session.defaultSession)", () => {
+    expect(
+      isWorkspaceTileStoragePath(
+        "/Users/x/Library/Application Support/MyApp",
+      ),
+    ).toBe(false);
+  });
+
+  test("matches by prefix, not substring — a final segment that merely contains ws- is rejected", () => {
+    expect(
+      isWorkspaceTileStoragePath(
+        "/Users/x/Library/Application Support/MyApp/Partitions/other-ws-thing",
+      ),
+    ).toBe(false);
   });
 });

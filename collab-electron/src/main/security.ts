@@ -1,8 +1,22 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Session, WebContents } from "electron";
 
 const BLOCKED_PROTOCOLS = ["javascript:", "data:", "file:", "blob:"];
+
+/**
+ * Returns true if a session's storagePath indicates a browser-tile partition
+ * (persist:ws-<hash>, set by tile-manager.js when creating a <webview> for
+ * external browsing). Session has no public `.partition` property, so this
+ * infers identity from storagePath's directory name instead — Electron maps
+ * `persist:<name>` to `<userData>/Partitions/<name>` (verified empirically
+ * against Electron 40.10.3; session.defaultSession and non-persist/in-memory
+ * sessions have no `Partitions` segment at all).
+ */
+export function isWorkspaceTileStoragePath(storagePath: string | null): boolean {
+  if (!storagePath) return false;
+  return basename(storagePath).startsWith("ws-");
+}
 
 /**
  * Deny all permission requests (camera/mic/geolocation/notifications/etc)
