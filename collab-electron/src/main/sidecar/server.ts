@@ -1,6 +1,7 @@
 // src/main/sidecar/server.ts
 import * as net from "node:net";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as crypto from "node:crypto";
 import * as pty from "node-pty";
 import { displayCommandName } from "@collab/shared/path-utils";
@@ -509,7 +510,14 @@ export class SidecarServer {
   }
 
   private sessionSocketPath(sessionId: string): string {
-    return buildSessionSocketPath(sessionId);
+    if (process.platform === "win32") {
+      return buildSessionSocketPath(sessionId);
+    }
+    // POSIX: honor the configured sessionSocketDir (tests inject a sandboxed
+    // temp dir here) instead of always resolving to the real ~/.collaborator
+    // path. Previously this ignored this.opts.sessionSocketDir entirely,
+    // which caused tests to leak into the real user pty-sessions dir.
+    return path.join(this.opts.sessionSocketDir, `${sessionId}.sock`);
   }
 
   private getForegroundCommand(session: Session): string {
