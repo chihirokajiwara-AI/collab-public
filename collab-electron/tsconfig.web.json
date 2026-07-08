@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "composite": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bun-types", "react", "react-dom", "d3"],
     "outDir": "out",
     "paths": {
       "@collab/shared/*": ["./packages/shared/src/*"],
