@@ -44,12 +44,17 @@ function isTrustedPreload(preloadPath: string | undefined): boolean {
 }
 
 /**
- * Attaches security handlers to the given WebContents:
- * - will-attach-webview: for browser tiles (partition starts with "persist:ws-"),
- *   strips preloads and enforces strict sandbox. For internal webviews
- *   (terminal, viewer, graph — no partition or empty partition),
- *   preserves preloads so IPC communication works.
- * - setWindowOpenHandler: denies all new window requests
+ * Attaches a will-attach-webview lockdown to the given WebContents: for
+ * browser tiles (partition starts with "persist:ws-"), strips preloads and
+ * enforces strict sandbox. For internal webviews (terminal, viewer, graph —
+ * no partition or empty partition), preserves preloads so IPC communication
+ * works.
+ *
+ * Does NOT touch setWindowOpenHandler — index.ts's own web-contents-created
+ * handler already implements window-open policy (allow browser-tile popups,
+ * forward external links to the OS browser, deny everything else); a
+ * blanket deny here would silently override that and break browser-tile
+ * popups since Electron keeps only the last-registered handler.
  */
 export function setupWebviewSecurity(webContents: WebContents): void {
   webContents.on(
@@ -70,6 +75,4 @@ export function setupWebviewSecurity(webContents: WebContents): void {
       // nodeIntegration is already false by default in Electron 40.
     },
   );
-
-  webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 }

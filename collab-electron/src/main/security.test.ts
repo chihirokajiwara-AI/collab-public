@@ -1,6 +1,10 @@
 import { describe, test, expect } from "bun:test";
-import type { Session } from "electron";
-import { isNavigationAllowed, setupPermissionHandler } from "./security";
+import type { Session, WebContents } from "electron";
+import {
+  isNavigationAllowed,
+  setupPermissionHandler,
+  setupWebviewSecurity,
+} from "./security";
 
 // isNavigationAllowed guards the will-navigate handler in index.ts against
 // javascript:/data:/file:/blob: navigations reaching internal webContents
@@ -125,5 +129,80 @@ describe("setupPermissionHandler", () => {
     }
 
     expect(results).toEqual([false, false, false, false]);
+  });
+});
+
+// setupWebviewSecurity guards webview attachment (index.ts web-contents-created).
+// It had zero call sites despite existing — browser tiles (persist:ws-*) could
+// attach with default (unsandboxed, preload-carrying) webPreferences.
+describe("setupWebviewSecurity", () => {
+  type AttachHandler = (
+    event: unknown,
+    webPreferences: Record<string, unknown>,
+    params: { partition?: string },
+  ) => void;
+
+  function makeMockWebContents() {
+    let attachHandler: AttachHandler | null = null;
+    let windowOpenHandlerCalled = false;
+
+    const contents = {
+      on(event: string, handler: AttachHandler) {
+        if (event === "will-attach-webview") attachHandler = handler;
+      },
+      setWindowOpenHandler() {
+        windowOpenHandlerCalled = true;
+      },
+    } as unknown as WebContents;
+
+    return {
+      contents,
+      getAttachHandler: () => attachHandler,
+      wasWindowOpenHandlerCalled: () => windowOpenHandlerCalled,
+    };
+  }
+
+  test("registers a will-attach-webview handler", () => {
+    const { contents, getAttachHandler } = makeMockWebContents();
+    setupWebviewSecurity(contents);
+    expect(getAttachHandler()).not.toBeNull();
+  });
+
+  test("locks down webPreferences for persist:ws-* (browser tile) partitions", () => {
+    const { contents, getAttachHandler } = makeMockWebContents();
+    setupWebviewSecurity(contents);
+
+    const webPreferences: Record<string, unknown> = {
+      preload: "/app/out/preload/webview.js",
+      nodeIntegration: true,
+      contextIsolation: false,
+      sandbox: false,
+    };
+    getAttachHandler()?.({}, webPreferences, { partition: "persist:ws-abc123" });
+
+    expect(webPreferences.preload).toBeUndefined();
+    expect(webPreferences.nodeIntegration).toBe(false);
+    expect(webPreferences.contextIsolation).toBe(true);
+    expect(webPreferences.sandbox).toBe(true);
+  });
+
+  test("leaves webPreferences untouched for internal webviews (no/empty partition)", () => {
+    const { contents, getAttachHandler } = makeMockWebContents();
+    setupWebviewSecurity(contents);
+
+    const webPreferences: Record<string, unknown> = {
+      preload: "/app/out/preload/universal.js",
+      nodeIntegration: false,
+      contextIsolation: true,
+    };
+    getAttachHandler()?.({}, webPreferences, { partition: "" });
+
+    expect(webPreferences.preload).toBe("/app/out/preload/universal.js");
+  });
+
+  test("does not touch setWindowOpenHandler — index.ts owns that policy", () => {
+    const { contents, wasWindowOpenHandlerCalled } = makeMockWebContents();
+    setupWebviewSecurity(contents);
+    expect(wasWindowOpenHandlerCalled()).toBe(false);
   });
 });

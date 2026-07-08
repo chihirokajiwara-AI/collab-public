@@ -47,7 +47,11 @@ import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
 import { listTerminalTargets } from "./terminal-target";
 import { readSessionMeta } from "./tmux";
-import { isNavigationAllowed, setupPermissionHandler } from "./security";
+import {
+  isNavigationAllowed,
+  setupPermissionHandler,
+  setupWebviewSecurity,
+} from "./security";
 
 // macOS apps launched from Finder don't inherit the user's shell
 // LANG, so child processes (tmux, shells) default to ASCII.
@@ -722,6 +726,11 @@ app.on("web-contents-created", (_event, contents) => {
   if (contents.session !== session.defaultSession) {
     setupPermissionHandler(contents.session);
   }
+
+  // Browser tiles (webview elements on persist:ws-* partitions) must attach
+  // without the app's preload/nodeIntegration — was previously unenforced,
+  // so a webview could attach with the default (unsandboxed) webPreferences.
+  setupWebviewSecurity(contents);
 
   const isExternal = (url: string): boolean => {
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
