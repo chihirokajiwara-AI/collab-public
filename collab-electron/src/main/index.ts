@@ -47,7 +47,7 @@ import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
 import { listTerminalTargets } from "./terminal-target";
 import { readSessionMeta } from "./tmux";
-import { isNavigationAllowed } from "./security";
+import { isNavigationAllowed, setupPermissionHandler } from "./security";
 
 // macOS apps launched from Finder don't inherit the user's shell
 // LANG, so child processes (tmux, shells) default to ASCII.
@@ -712,6 +712,17 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.on("web-contents-created", (_event, contents) => {
+  // Electron auto-grants all permission requests (camera/mic/geolocation/
+  // notifications) unless setPermissionRequestHandler is set explicitly.
+  // Scope the deny-all to sessions that do NOT share the app's own
+  // defaultSession (i.e. untrusted browser-tile content on
+  // persist:browser / persist:ws-* partitions) — the main window and
+  // internal webviews (terminal/viewer/graph) share defaultSession and
+  // rely on Electron's default-allow for clipboard read/write.
+  if (contents.session !== session.defaultSession) {
+    setupPermissionHandler(contents.session);
+  }
+
   const isExternal = (url: string): boolean => {
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       return false;

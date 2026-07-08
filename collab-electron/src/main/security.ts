@@ -5,7 +5,11 @@ import type { Session, WebContents } from "electron";
 const BLOCKED_PROTOCOLS = ["javascript:", "data:", "file:", "blob:"];
 
 /**
- * Deny all permission requests for the given session.
+ * Deny all permission requests (camera/mic/geolocation/notifications/etc)
+ * for the given session. Electron auto-grants every permission request by
+ * default unless setPermissionRequestHandler is set explicitly, so this
+ * must be wired into every session we create (see web-contents-created in
+ * index.ts).
  */
 export function setupPermissionHandler(sess: Session): void {
   sess.setPermissionRequestHandler((_webContents, _permission, callback) => {
