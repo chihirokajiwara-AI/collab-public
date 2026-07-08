@@ -52,6 +52,7 @@ jobs:
           src/main/file-title.test.ts
           src/main/workspace-graph.test.ts
           src/main/pty.test.ts
+          src/main/security.test.ts
           src/main/sidecar/ring-buffer.test.ts
           src/main/updater
           src/windows/shell/src/panel-manager.test.ts

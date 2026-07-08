@@ -47,6 +47,7 @@ import { stopImageWorker } from "./image-service";
 import { installCli } from "./cli-installer";
 import { listTerminalTargets } from "./terminal-target";
 import { readSessionMeta } from "./tmux";
+import { isNavigationAllowed } from "./security";
 
 // macOS apps launched from Finder don't inherit the user's shell
 // LANG, so child processes (tmux, shells) default to ASCII.
@@ -744,7 +745,12 @@ app.on("web-contents-created", (_event, contents) => {
     return { action: "deny" };
   });
   contents.on("will-navigate", (event, url) => {
-    if (isExternal(url) && !isBrowserTileWebview(contents)) {
+    if (isBrowserTileWebview(contents)) return;
+    if (!isNavigationAllowed(url)) {
+      event.preventDefault();
+      return;
+    }
+    if (isExternal(url)) {
       event.preventDefault();
       shell.openExternal(url);
     }
