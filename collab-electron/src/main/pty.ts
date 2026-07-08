@@ -105,7 +105,7 @@ function utf8Env(): Record<string, string> {
   return env;
 }
 
-function withOptionalFields<T extends object>(
+export function withOptionalFields<T extends object>(
   base: T,
   fields: Record<string, unknown>,
 ): T {
