@@ -19,6 +19,7 @@ import {
   saveDroppedImage,
 } from "./image-service";
 import type { FileFilter } from "./file-filter";
+import { sanitizeFileTitle } from "./file-title";
 import * as wikilinkIndex from "./wikilink-index";
 import type {
   FolderTableData,
@@ -122,10 +123,7 @@ export function registerFilesystemHandlers(
   ipcMain.handle(
     "fs:rename",
     async (_event, oldPath: string, newTitle: string) => {
-      const sanitized = newTitle
-        .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
-        .replace(/\.\s*$/, "")
-        .trim();
+      const sanitized = sanitizeFileTitle(newTitle);
       if (sanitized.length === 0) {
         throw new Error("Title cannot be empty");
       }

@@ -49,6 +49,7 @@ jobs:
           src/main/import-service.test.ts
           src/main/files.test.ts
           src/main/file-filter.test.ts
+          src/main/file-title.test.ts
           src/main/sidecar/ring-buffer.test.ts
           src/main/updater
           src/windows/shell/src/panel-manager.test.ts
