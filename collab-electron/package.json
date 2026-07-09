@@ -17,8 +17,9 @@
 		"package": "bun ./scripts/package.mjs",
 		"package:unsigned": "bun ./scripts/package.mjs --no-sign",
 		"release": "bun ./scripts/package.mjs --publish",
-		"test": "bun test",
+		"test": "bun test --path-ignore-patterns='src/main/sidecar/server.test.ts' --path-ignore-patterns='src/main/sidecar/client.test.ts'",
 		"test:updater": "bun test src/main/updater/github-release-fetcher.test.ts && bun test src/main/updater/downloader.test.ts && bun test src/main/updater/update-manager.test.ts",
+		"test:sidecar": "npx tsx --test src/main/sidecar/server.test.ts src/main/sidecar/client.test.ts",
 		"postinstall": "electron-rebuild -f -w node-pty"
 	},
 	"build": {
